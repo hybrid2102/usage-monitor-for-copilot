@@ -12,8 +12,8 @@ import time
 import unittest
 from unittest.mock import MagicMock, patch
 
-from usage_monitor_for_claude.cache import CacheSnapshot
-from usage_monitor_for_claude.popup import UsagePopup, _init_config, _snapshot_to_dict, _usage_entries
+from usage_monitor_for_codex.cache import CacheSnapshot
+from usage_monitor_for_codex.popup import UsagePopup, _init_config, _snapshot_to_dict, _usage_entries
 
 
 def _snap(
@@ -51,7 +51,7 @@ class TestUsageEntries(unittest.TestCase):
 
     def test_labels_use_popup_label(self):
         """Each entry's label is generated via popup_label."""
-        from usage_monitor_for_claude.formatting import popup_label
+        from usage_monitor_for_codex.formatting import popup_label
 
         usage = {
             'five_hour': {'utilization': 42, 'resets_at': '2026-01-01T00:00:00Z'},
@@ -111,7 +111,7 @@ class TestUsageEntries(unittest.TestCase):
         self.assertEqual(len(entries), 1)
         self.assertEqual(entries[0][1]['utilization'], 20)
 
-    @patch('usage_monitor_for_claude.popup.POPUP_FIELDS', ['fve_hour', 'seven_day'])
+    @patch('usage_monitor_for_codex.popup.POPUP_FIELDS', ['fve_hour', 'seven_day'])
     def test_misspelled_popup_field_skipped(self):
         """Misspelled popup_fields entry is skipped, valid one shown."""
         usage = {
@@ -122,7 +122,7 @@ class TestUsageEntries(unittest.TestCase):
         self.assertEqual(len(entries), 1)
         self.assertEqual(entries[0][1]['utilization'], 20)
 
-    @patch('usage_monitor_for_claude.popup.POPUP_FIELDS', ['seven_day_sonnet'])
+    @patch('usage_monitor_for_codex.popup.POPUP_FIELDS', ['seven_day_sonnet'])
     def test_popup_field_pointing_to_null_skipped(self):
         """popup_fields entry pointing to a null field produces no entries."""
         usage = {'seven_day_sonnet': None, 'five_hour': {'utilization': 42, 'resets_at': ''}}
@@ -209,9 +209,9 @@ class TestSnapshotToDict(unittest.TestCase):
         result = _snapshot_to_dict(_snap(usage=usage), installations=[])
         self.assertEqual(result['usage'], [])
 
-    @patch('usage_monitor_for_claude.popup.elapsed_pct', return_value=None)
-    @patch('usage_monitor_for_claude.popup.time_until', return_value='5h 0m')
-    @patch('usage_monitor_for_claude.popup.divider_positions', return_value=[])
+    @patch('usage_monitor_for_codex.popup.elapsed_pct', return_value=None)
+    @patch('usage_monitor_for_codex.popup.time_until', return_value='5h 0m')
+    @patch('usage_monitor_for_codex.popup.divider_positions', return_value=[])
     def test_usage_bar_fields(self, _mock_dividers, _mock_time_until, _mock_elapsed):
         """Each usage bar dict has all required fields with correct types."""
         usage = {'five_hour': {'utilization': 42, 'resets_at': '2026-01-01T05:00:00Z'}}
@@ -241,9 +241,9 @@ class TestSnapshotToDict(unittest.TestCase):
         self.assertIsNone(bar['marker_rel'])
         self.assertFalse(bar['warn'])
 
-    @patch('usage_monitor_for_claude.popup.elapsed_pct', return_value=30.0)
-    @patch('usage_monitor_for_claude.popup.time_until', return_value='3h 30m')
-    @patch('usage_monitor_for_claude.popup.divider_positions', return_value=[0.5])
+    @patch('usage_monitor_for_codex.popup.elapsed_pct', return_value=30.0)
+    @patch('usage_monitor_for_codex.popup.time_until', return_value='3h 30m')
+    @patch('usage_monitor_for_codex.popup.divider_positions', return_value=[0.5])
     def test_warn_when_usage_ahead_of_time(self, _mock_dividers, _mock_time_until, _mock_elapsed):
         """Bar is marked warn when utilization exceeds elapsed percentage."""
         usage = {'five_hour': {'utilization': 60, 'resets_at': '2026-01-01T05:00:00Z'}}
@@ -253,9 +253,9 @@ class TestSnapshotToDict(unittest.TestCase):
         self.assertTrue(bar['warn'])
         self.assertAlmostEqual(bar['marker_rel'], 0.3)
 
-    @patch('usage_monitor_for_claude.popup.elapsed_pct', return_value=80.0)
-    @patch('usage_monitor_for_claude.popup.time_until', return_value='1h 0m')
-    @patch('usage_monitor_for_claude.popup.divider_positions', return_value=[])
+    @patch('usage_monitor_for_codex.popup.elapsed_pct', return_value=80.0)
+    @patch('usage_monitor_for_codex.popup.time_until', return_value='1h 0m')
+    @patch('usage_monitor_for_codex.popup.divider_positions', return_value=[])
     def test_no_warn_when_usage_behind_time(self, _mock_dividers, _mock_time_until, _mock_elapsed):
         """Bar is not warn when utilization is below elapsed percentage."""
         usage = {'five_hour': {'utilization': 40, 'resets_at': '2026-01-01T05:00:00Z'}}
@@ -264,36 +264,36 @@ class TestSnapshotToDict(unittest.TestCase):
         bar = result['usage'][0]
         self.assertFalse(bar['warn'])
 
-    @patch('usage_monitor_for_claude.popup.elapsed_pct', return_value=50.0)
-    @patch('usage_monitor_for_claude.popup.time_until', return_value='2h 30m')
-    @patch('usage_monitor_for_claude.popup.divider_positions', return_value=[])
+    @patch('usage_monitor_for_codex.popup.elapsed_pct', return_value=50.0)
+    @patch('usage_monitor_for_codex.popup.time_until', return_value='2h 30m')
+    @patch('usage_monitor_for_codex.popup.divider_positions', return_value=[])
     def test_no_warn_when_equal(self, _mock_dividers, _mock_time_until, _mock_elapsed):
         """Exactly equal usage and elapsed is not a warning (strictly greater)."""
         usage = {'five_hour': {'utilization': 50, 'resets_at': '2026-01-01T05:00:00Z'}}
         result = _snapshot_to_dict(_snap(usage=usage), installations=[])
         self.assertFalse(result['usage'][0]['warn'])
 
-    @patch('usage_monitor_for_claude.popup.elapsed_pct', return_value=None)
-    @patch('usage_monitor_for_claude.popup.time_until', return_value='')
-    @patch('usage_monitor_for_claude.popup.divider_positions', return_value=[])
+    @patch('usage_monitor_for_codex.popup.elapsed_pct', return_value=None)
+    @patch('usage_monitor_for_codex.popup.time_until', return_value='')
+    @patch('usage_monitor_for_codex.popup.divider_positions', return_value=[])
     def test_warn_at_100_without_time_period(self, _mock_dividers, _mock_time_until, _mock_elapsed):
         """Bar at 100% is warn even when no time period (time_pct is None)."""
         usage = {'five_hour': {'utilization': 100, 'resets_at': ''}}
         result = _snapshot_to_dict(_snap(usage=usage), installations=[])
         self.assertTrue(result['usage'][0]['warn'])
 
-    @patch('usage_monitor_for_claude.popup.elapsed_pct', return_value=100.0)
-    @patch('usage_monitor_for_claude.popup.time_until', return_value='')
-    @patch('usage_monitor_for_claude.popup.divider_positions', return_value=[])
+    @patch('usage_monitor_for_codex.popup.elapsed_pct', return_value=100.0)
+    @patch('usage_monitor_for_codex.popup.time_until', return_value='')
+    @patch('usage_monitor_for_codex.popup.divider_positions', return_value=[])
     def test_warn_at_100_when_time_also_100(self, _mock_dividers, _mock_time_until, _mock_elapsed):
         """Bar at 100% is warn even when elapsed time is also 100% (strict > would miss this)."""
         usage = {'five_hour': {'utilization': 100, 'resets_at': '2026-01-01T05:00:00Z'}}
         result = _snapshot_to_dict(_snap(usage=usage), installations=[])
         self.assertTrue(result['usage'][0]['warn'])
 
-    @patch('usage_monitor_for_claude.popup.elapsed_pct', return_value=None)
-    @patch('usage_monitor_for_claude.popup.time_until', return_value='')
-    @patch('usage_monitor_for_claude.popup.divider_positions', return_value=[])
+    @patch('usage_monitor_for_codex.popup.elapsed_pct', return_value=None)
+    @patch('usage_monitor_for_codex.popup.time_until', return_value='')
+    @patch('usage_monitor_for_codex.popup.divider_positions', return_value=[])
     def test_fill_pct_clamped_to_0_1(self, _mock_dividers, _mock_time_until, _mock_elapsed):
         """Fill percentage is clamped between 0.0 and 1.0, and over-quota is always warn."""
         usage = {'five_hour': {'utilization': 150, 'resets_at': '2026-01-01T05:00:00Z'}}
@@ -301,9 +301,9 @@ class TestSnapshotToDict(unittest.TestCase):
         self.assertEqual(result['usage'][0]['fill_pct'], 1.0)
         self.assertTrue(result['usage'][0]['warn'])
 
-    @patch('usage_monitor_for_claude.popup.elapsed_pct', return_value=None)
-    @patch('usage_monitor_for_claude.popup.time_until', return_value='')
-    @patch('usage_monitor_for_claude.popup.divider_positions', return_value=[])
+    @patch('usage_monitor_for_codex.popup.elapsed_pct', return_value=None)
+    @patch('usage_monitor_for_codex.popup.time_until', return_value='')
+    @patch('usage_monitor_for_codex.popup.divider_positions', return_value=[])
     def test_zero_utilization(self, _mock_dividers, _mock_time_until, _mock_elapsed):
         """Zero utilization produces 0% text and 0.0 fill."""
         usage = {'five_hour': {'utilization': 0, 'resets_at': '2026-01-01T05:00:00Z'}}
@@ -313,9 +313,9 @@ class TestSnapshotToDict(unittest.TestCase):
         self.assertEqual(bar['pct_text'], '0%')
         self.assertAlmostEqual(bar['fill_pct'], 0.0)
 
-    @patch('usage_monitor_for_claude.popup.elapsed_pct', return_value=None)
-    @patch('usage_monitor_for_claude.popup.time_until', return_value='')
-    @patch('usage_monitor_for_claude.popup.divider_positions', return_value=[])
+    @patch('usage_monitor_for_codex.popup.elapsed_pct', return_value=None)
+    @patch('usage_monitor_for_codex.popup.time_until', return_value='')
+    @patch('usage_monitor_for_codex.popup.divider_positions', return_value=[])
     def test_multiple_usage_entries(self, _mock_dividers, _mock_time_until, _mock_elapsed):
         """Multiple usage types each produce a bar entry."""
         usage = {
@@ -328,9 +328,9 @@ class TestSnapshotToDict(unittest.TestCase):
         pcts = [b['pct_text'] for b in result['usage']]
         self.assertEqual(pcts, ['10%', '20%', '30%'])
 
-    @patch('usage_monitor_for_claude.popup.elapsed_pct', return_value=None)
-    @patch('usage_monitor_for_claude.popup.time_until', return_value='')
-    @patch('usage_monitor_for_claude.popup.divider_positions', return_value=[])
+    @patch('usage_monitor_for_codex.popup.elapsed_pct', return_value=None)
+    @patch('usage_monitor_for_codex.popup.time_until', return_value='')
+    @patch('usage_monitor_for_codex.popup.divider_positions', return_value=[])
     def test_usage_bar_includes_field_key(self, _mock_div, _mock_tu, _mock_ep):
         """Each usage bar dict carries its API field name for compact hiding."""
         usage = {
@@ -341,10 +341,10 @@ class TestSnapshotToDict(unittest.TestCase):
         keys = [bar['key'] for bar in result['usage']]
         self.assertEqual(keys, ['five_hour', 'seven_day_opus'])
 
-    @patch('usage_monitor_for_claude.popup.POPUP_FIELDS', ['typo_field', 'seven_day'])
-    @patch('usage_monitor_for_claude.popup.elapsed_pct', return_value=None)
-    @patch('usage_monitor_for_claude.popup.time_until', return_value='')
-    @patch('usage_monitor_for_claude.popup.divider_positions', return_value=[])
+    @patch('usage_monitor_for_codex.popup.POPUP_FIELDS', ['typo_field', 'seven_day'])
+    @patch('usage_monitor_for_codex.popup.elapsed_pct', return_value=None)
+    @patch('usage_monitor_for_codex.popup.time_until', return_value='')
+    @patch('usage_monitor_for_codex.popup.divider_positions', return_value=[])
     def test_misspelled_popup_field_skipped_in_dict(self, _mock_div, _mock_tu, _mock_ep):
         """Misspelled popup_fields entry produces no bar, valid one shown."""
         usage = {
@@ -361,9 +361,9 @@ class TestSnapshotToDict(unittest.TestCase):
         result = _snapshot_to_dict(_snap(usage=usage), installations=[])
         self.assertEqual(result['usage'], [])
 
-    @patch('usage_monitor_for_claude.popup.elapsed_pct', return_value=None)
-    @patch('usage_monitor_for_claude.popup.time_until', return_value='')
-    @patch('usage_monitor_for_claude.popup.divider_positions', return_value=[])
+    @patch('usage_monitor_for_codex.popup.elapsed_pct', return_value=None)
+    @patch('usage_monitor_for_codex.popup.time_until', return_value='')
+    @patch('usage_monitor_for_codex.popup.divider_positions', return_value=[])
     def test_non_dict_values_in_response_ignored(self, _mock_div, _mock_tu, _mock_ep):
         """Non-dict values in the API response are not shown as bars."""
         usage = {
@@ -394,7 +394,7 @@ class TestSnapshotToDict(unittest.TestCase):
         result = _snapshot_to_dict(_snap(usage=usage), installations=[])
         self.assertIsNone(result['extra'])
 
-    @patch('usage_monitor_for_claude.popup.format_credits', side_effect=lambda c, *_: f'${c / 100:.2f}')
+    @patch('usage_monitor_for_codex.popup.format_credits', side_effect=lambda c, *_: f'${c / 100:.2f}')
     def test_extra_usage_zero_limit_shows_no_cap_variant(self, _mock_credits):
         """A zero monthly limit shows the no-cap spent text instead of hiding the section."""
         usage = {'extra_usage': {'is_enabled': True, 'monthly_limit': 0, 'used_credits': 0}}
@@ -405,7 +405,7 @@ class TestSnapshotToDict(unittest.TestCase):
         self.assertEqual(extra['pct_text'], '')
         self.assertIn('$0.00', extra['spent_text'])
 
-    @patch('usage_monitor_for_claude.popup.format_credits', side_effect=lambda c, *_: f'${c / 100:.2f}')
+    @patch('usage_monitor_for_codex.popup.format_credits', side_effect=lambda c, *_: f'${c / 100:.2f}')
     def test_extra_usage_null_limit_shows_no_cap_variant(self, _mock_credits):
         """A null monthly_limit (uncapped pay-as-you-go credits) shows what has been spent."""
         usage = {'extra_usage': {'is_enabled': True, 'monthly_limit': None, 'used_credits': 2981}}
@@ -415,7 +415,7 @@ class TestSnapshotToDict(unittest.TestCase):
         self.assertFalse(extra['has_limit'])
         self.assertIn('$29.81', extra['spent_text'])
 
-    @patch('usage_monitor_for_claude.popup.format_credits', side_effect=lambda c, *_: f'${c / 100:.2f}')
+    @patch('usage_monitor_for_codex.popup.format_credits', side_effect=lambda c, *_: f'${c / 100:.2f}')
     def test_extra_usage_calculation(self, _mock_credits):
         """Extra usage computes percentage and formatted text correctly."""
         usage = {'extra_usage': {'is_enabled': True, 'monthly_limit': 10000, 'used_credits': 2500}}
@@ -429,7 +429,7 @@ class TestSnapshotToDict(unittest.TestCase):
         self.assertIn('$25.00', extra['spent_text'])
         self.assertIn('$100.00', extra['spent_text'])
 
-    @patch('usage_monitor_for_claude.popup.format_credits', side_effect=lambda c, *_: f'${c / 100:.2f}')
+    @patch('usage_monitor_for_codex.popup.format_credits', side_effect=lambda c, *_: f'${c / 100:.2f}')
     def test_extra_usage_fill_clamped(self, _mock_credits):
         """Extra usage fill is clamped to 1.0 when over limit."""
         usage = {'extra_usage': {'is_enabled': True, 'monthly_limit': 1000, 'used_credits': 2000}}
@@ -438,10 +438,10 @@ class TestSnapshotToDict(unittest.TestCase):
 
     # -- prepaid balance --
 
-    @patch('usage_monitor_for_claude.popup.format_credits', side_effect=lambda c, *_: f'${c / 100:.2f}')
+    @patch('usage_monitor_for_codex.popup.format_credits', side_effect=lambda c, *_: f'${c / 100:.2f}')
     def test_prepaid_balance_rendered_with_limit(self, _mock_credits):
         """The balance is rendered as an extra line next to the spent text."""
-        from usage_monitor_for_claude.i18n import T
+        from usage_monitor_for_codex.i18n import T
 
         usage = {'extra_usage': {'is_enabled': True, 'monthly_limit': 10000, 'used_credits': 2500}}
         prepaid = {'amount_minor': 5597, 'currency': 'EUR', 'decimal_places': 2}
@@ -450,10 +450,10 @@ class TestSnapshotToDict(unittest.TestCase):
 
         self.assertEqual(result['extra']['balance_text'], T['extra_usage_balance'].format(balance='$55.97'))
 
-    @patch('usage_monitor_for_claude.popup.format_credits', side_effect=lambda c, *_: f'${c / 100:.2f}')
+    @patch('usage_monitor_for_codex.popup.format_credits', side_effect=lambda c, *_: f'${c / 100:.2f}')
     def test_prepaid_balance_rendered_without_limit(self, _mock_credits):
         """The balance is also rendered for uncapped extra usage."""
-        from usage_monitor_for_claude.i18n import T
+        from usage_monitor_for_codex.i18n import T
 
         usage = {'extra_usage': {'is_enabled': True, 'monthly_limit': None, 'used_credits': 2981}}
         prepaid = {'amount_minor': 5597, 'currency': 'EUR', 'decimal_places': 2}
@@ -462,10 +462,10 @@ class TestSnapshotToDict(unittest.TestCase):
 
         self.assertEqual(result['extra']['balance_text'], T['extra_usage_balance'].format(balance='$55.97'))
 
-    @patch('usage_monitor_for_claude.popup.format_credits', side_effect=lambda c, *_: f'${c / 100:.2f}')
+    @patch('usage_monitor_for_codex.popup.format_credits', side_effect=lambda c, *_: f'${c / 100:.2f}')
     def test_zero_prepaid_balance_rendered(self, _mock_credits):
         """A depleted balance is shown rather than hidden."""
-        from usage_monitor_for_claude.i18n import T
+        from usage_monitor_for_codex.i18n import T
 
         usage = {'extra_usage': {'is_enabled': True, 'monthly_limit': 10000, 'used_credits': 2500}}
 
@@ -473,7 +473,7 @@ class TestSnapshotToDict(unittest.TestCase):
 
         self.assertEqual(result['extra']['balance_text'], T['extra_usage_balance'].format(balance='$0.00'))
 
-    @patch('usage_monitor_for_claude.popup.format_credits', side_effect=lambda c, *_: f'${c / 100:.2f}')
+    @patch('usage_monitor_for_codex.popup.format_credits', side_effect=lambda c, *_: f'${c / 100:.2f}')
     def test_missing_prepaid_balance_renders_empty(self, _mock_credits):
         """Without a balance the extra section keeps exactly its previous content."""
         usage = {'extra_usage': {'is_enabled': True, 'monthly_limit': 10000, 'used_credits': 2500}}
@@ -499,7 +499,7 @@ class TestSnapshotToDict(unittest.TestCase):
         result = _snapshot_to_dict(_snap(), installations=installs)
         self.assertEqual(result['installations'], installs)
 
-    @patch('usage_monitor_for_claude.popup.find_installations')
+    @patch('usage_monitor_for_codex.popup.find_installations')
     def test_installations_auto_detected(self, mock_find):
         """When installations is None, find_installations() is called."""
         inst = MagicMock()
@@ -527,15 +527,15 @@ class TestSnapshotToDict(unittest.TestCase):
 
     def test_status_refreshing_when_no_usage_no_error(self):
         """Shows refreshing status when no usage data and no error."""
-        from usage_monitor_for_claude.i18n import T
+        from usage_monitor_for_codex.i18n import T
 
         result = _snapshot_to_dict(_snap(usage={}, last_error=None), installations=[])
         self.assertEqual(result['status']['text'], T['status_refreshing'])
         self.assertFalse(result['status']['is_error'])
 
-    @patch('usage_monitor_for_claude.popup.elapsed_pct', return_value=None)
-    @patch('usage_monitor_for_claude.popup.time_until', return_value='')
-    @patch('usage_monitor_for_claude.popup.divider_positions', return_value=[])
+    @patch('usage_monitor_for_codex.popup.elapsed_pct', return_value=None)
+    @patch('usage_monitor_for_codex.popup.time_until', return_value='')
+    @patch('usage_monitor_for_codex.popup.divider_positions', return_value=[])
     def test_status_live_mode_keys(self, _mock_div, _mock_tu, _mock_ep):
         """Live mode status contains all required keys for the JS timer."""
         usage = {'five_hour': {'utilization': 50, 'resets_at': '2026-01-01T05:00:00Z'}}
@@ -545,9 +545,9 @@ class TestSnapshotToDict(unittest.TestCase):
         )
         self.assertEqual(set(result['status'].keys()), {'last_success_time', 'next_poll_time', 'refreshing', 'error'})
 
-    @patch('usage_monitor_for_claude.popup.elapsed_pct', return_value=None)
-    @patch('usage_monitor_for_claude.popup.time_until', return_value='')
-    @patch('usage_monitor_for_claude.popup.divider_positions', return_value=[])
+    @patch('usage_monitor_for_codex.popup.elapsed_pct', return_value=None)
+    @patch('usage_monitor_for_codex.popup.time_until', return_value='')
+    @patch('usage_monitor_for_codex.popup.divider_positions', return_value=[])
     def test_status_error_truncated_in_live_mode(self, _mock_div, _mock_tu, _mock_ep):
         """Error messages are truncated to 120 characters in live mode."""
         usage = {'five_hour': {'utilization': 50, 'resets_at': '2026-01-01T05:00:00Z'}}
@@ -578,7 +578,7 @@ class TestInitConfig(unittest.TestCase):
         config = _init_config(_snap())
         self.assertEqual(set(config.keys()), {'colors', 't', 'app_version', 'compact_hide', 'data'})
 
-    @patch('usage_monitor_for_claude.popup.COMPACT_HIDE', ['account', 'seven_day_opus'])
+    @patch('usage_monitor_for_codex.popup.COMPACT_HIDE', ['account', 'seven_day_opus'])
     def test_compact_hide_from_settings(self):
         """compact_hide is taken from the COMPACT_HIDE setting."""
         config = _init_config(_snap())
@@ -586,7 +586,7 @@ class TestInitConfig(unittest.TestCase):
 
     def test_colors_from_settings(self):
         """Color values come from settings module constants."""
-        from usage_monitor_for_claude.settings import BAR_BG, BAR_DIVIDER, BAR_FG, BAR_FG_WARN, BAR_MARKER, BG, FG, FG_DIM, FG_HEADING, FG_LINK
+        from usage_monitor_for_codex.settings import BAR_BG, BAR_DIVIDER, BAR_FG, BAR_FG_WARN, BAR_MARKER, BG, FG, FG_DIM, FG_HEADING, FG_LINK
 
         config = _init_config(_snap())
         colors = config['colors']
@@ -603,7 +603,7 @@ class TestInitConfig(unittest.TestCase):
 
     def test_translations_from_i18n(self):
         """Translation values come from the T dict."""
-        from usage_monitor_for_claude.i18n import T
+        from usage_monitor_for_codex.i18n import T
 
         config = _init_config(_snap())
         t = config['t']
@@ -613,7 +613,7 @@ class TestInitConfig(unittest.TestCase):
         self.assertEqual(t['plan'], T['plan'])
         self.assertEqual(t['usage'], T['usage'])
         self.assertEqual(t['extra_usage'], T['extra_usage'])
-        self.assertEqual(t['claude_code'], T['claude_code'])
+        self.assertEqual(t['codex_code'], T['codex_code'])
         self.assertEqual(t['changelog'], T['changelog'])
         self.assertEqual(t['pin_popup'], T['pin_popup'])
         self.assertEqual(t['unpin_popup'], T['unpin_popup'])
@@ -627,7 +627,7 @@ class TestInitConfig(unittest.TestCase):
 
     def test_app_version(self):
         """app_version matches the package version."""
-        from usage_monitor_for_claude import __version__
+        from usage_monitor_for_codex import __version__
 
         config = _init_config(_snap())
         self.assertEqual(config['app_version'], __version__)
@@ -660,8 +660,8 @@ class TestReportHeight(unittest.TestCase):
         webview.create_window.
         """
         patcher_watch = patch.object(UsagePopup, '_dismiss_watch', lambda self: None)
-        patcher_webview = patch('usage_monitor_for_claude.popup.webview')
-        patcher_host = patch('usage_monitor_for_claude.popup.PopupHost')
+        patcher_webview = patch('usage_monitor_for_codex.popup.webview')
+        patcher_host = patch('usage_monitor_for_codex.popup.PopupHost')
         patcher_watch.start()
         mock_webview = patcher_webview.start()
         patcher_host.start()
@@ -947,9 +947,9 @@ class TestUpdateLoopResilience(unittest.TestCase):
             if iterations[0] > 10:
                 popup._running = False
 
-        with patch('usage_monitor_for_claude.popup.time.sleep', side_effect=guarded_sleep), \
-             patch('usage_monitor_for_claude.popup.find_installations', return_value=[]), \
-             patch('usage_monitor_for_claude.popup._snapshot_to_dict', return_value={}):
+        with patch('usage_monitor_for_codex.popup.time.sleep', side_effect=guarded_sleep), \
+             patch('usage_monitor_for_codex.popup.find_installations', return_value=[]), \
+             patch('usage_monitor_for_codex.popup._snapshot_to_dict', return_value={}):
             popup._update_loop()
 
         self.assertEqual(popup._window.evaluate_js.call_count, 2)
@@ -982,9 +982,9 @@ class TestUpdateLoopResilience(unittest.TestCase):
             if iterations[0] > 10:
                 popup._running = False
 
-        with patch('usage_monitor_for_claude.popup.time.sleep', side_effect=guarded_sleep), \
-             patch('usage_monitor_for_claude.popup.find_installations', return_value=[]), \
-             patch('usage_monitor_for_claude.popup._snapshot_to_dict', return_value={}):
+        with patch('usage_monitor_for_codex.popup.time.sleep', side_effect=guarded_sleep), \
+             patch('usage_monitor_for_codex.popup.find_installations', return_value=[]), \
+             patch('usage_monitor_for_codex.popup._snapshot_to_dict', return_value={}):
             popup._update_loop()
 
         self.assertEqual(popup._window.evaluate_js.call_count, 2)

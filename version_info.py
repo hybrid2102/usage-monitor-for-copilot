@@ -2,8 +2,8 @@
 
 VSVersionInfo(
     ffi=FixedFileInfo(
-        filevers=(1, 22, 0, 0),
-        prodvers=(1, 22, 0, 0),
+        filevers=(0, 1, 0, 0),
+        prodvers=(0, 1, 0, 0),
         mask=0x3F,
         flags=0x0,
         OS=0x40004,          # VOS_NT_WINDOWS32
@@ -15,13 +15,13 @@ VSVersionInfo(
             StringTable(
                 '040904B0',  # Lang: US English, Charset: Unicode
                 [
-                    StringStruct('CompanyName', 'Jens Duttke'),
-                    StringStruct('FileDescription', 'Usage Monitor for Claude'),
-                    StringStruct('FileVersion', '1.22.0.0'),
-                    StringStruct('InternalName', 'UsageMonitorForClaude'),
-                    StringStruct('OriginalFilename', 'UsageMonitorForClaude.exe'),
-                    StringStruct('ProductName', 'Usage Monitor for Claude'),
-                    StringStruct('ProductVersion', '1.22.0.0'),
+                    StringStruct('CompanyName', 'hybrid2102'),
+                    StringStruct('FileDescription', 'Usage Monitor for Codex'),
+                    StringStruct('FileVersion', '0.1.0.0'),
+                    StringStruct('InternalName', 'UsageMonitorForCodex'),
+                    StringStruct('OriginalFilename', 'UsageMonitorForCodex.exe'),
+                    StringStruct('ProductName', 'Usage Monitor for Codex'),
+                    StringStruct('ProductVersion', '0.1.0.0'),
                 ],
             ),
         ]),

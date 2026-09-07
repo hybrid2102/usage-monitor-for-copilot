@@ -16,7 +16,7 @@ from unittest.mock import MagicMock, patch
 if sys.platform == 'win32':
     raise unittest.SkipTest('Linux single-instance guard is not used on Windows')
 
-import usage_monitor_for_claude.platforms.instance_linux as si  # noqa: E402
+import usage_monitor_for_codex.platforms.instance_linux as si  # noqa: E402
 
 
 class _LockTestCase(unittest.TestCase):
@@ -62,7 +62,7 @@ class TestLockPath(unittest.TestCase):
         """A second monitored account is a singleton for itself only."""
         with patch.object(si, '_lock_directory', return_value=Path('/run')), \
              patch.object(si, 'config_dir_suffix', return_value='-abc'):
-            self.assertEqual(si._lock_path(), Path('/run/usage-monitor-for-claude-abc.lock'))
+            self.assertEqual(si._lock_path(), Path('/run/usage-monitor-for-codex-abc.lock'))
 
 
 class TestEnsureSingleInstance(_LockTestCase):
@@ -89,7 +89,7 @@ class TestEnsureSingleInstance(_LockTestCase):
 
     def test_replace_terminates_holder_and_retakes(self):
         """Accepting the dialog terminates the holder and retakes the lock."""
-        self.directory.joinpath('usage-monitor-for-claude.lock').write_text('4242\n9.9.9\n', encoding='utf-8')
+        self.directory.joinpath('usage-monitor-for-codex.lock').write_text('4242\n9.9.9\n', encoding='utf-8')
 
         with patch.object(si, '_acquire', side_effect=[None, 7]), \
              patch.object(si, 'ask_yes_no', return_value=True), \
@@ -103,7 +103,7 @@ class TestEnsureSingleInstance(_LockTestCase):
 
     def test_replace_fails_when_holder_survives(self):
         """A holder that will not die leaves the new instance refusing to start."""
-        self.directory.joinpath('usage-monitor-for-claude.lock').write_text('4242\n9.9.9\n', encoding='utf-8')
+        self.directory.joinpath('usage-monitor-for-codex.lock').write_text('4242\n9.9.9\n', encoding='utf-8')
 
         with patch.object(si, '_acquire', return_value=None), \
              patch.object(si, 'ask_yes_no', return_value=True), \
@@ -119,10 +119,10 @@ class TestEnsureSingleInstance(_LockTestCase):
         The kernel recycles PIDs, so the snapshot could name an unrelated
         process by the time the user answers.
         """
-        self.directory.joinpath('usage-monitor-for-claude.lock').write_text('4242\n9.9.9\n', encoding='utf-8')
+        self.directory.joinpath('usage-monitor-for-codex.lock').write_text('4242\n9.9.9\n', encoding='utf-8')
 
         def rewrite_holder():
-            self.directory.joinpath('usage-monitor-for-claude.lock').write_text('5555\n9.9.9\n', encoding='utf-8')
+            self.directory.joinpath('usage-monitor-for-codex.lock').write_text('5555\n9.9.9\n', encoding='utf-8')
             return True
 
         with patch.object(si, '_acquire', side_effect=[None, 7]), \
@@ -136,7 +136,7 @@ class TestEnsureSingleInstance(_LockTestCase):
 
     def test_dialog_title_carries_holder_version(self):
         """The dialog names the version that is already running."""
-        self.directory.joinpath('usage-monitor-for-claude.lock').write_text('4242\n1.2.3\n', encoding='utf-8')
+        self.directory.joinpath('usage-monitor-for-codex.lock').write_text('4242\n1.2.3\n', encoding='utf-8')
 
         with patch.object(si, '_acquire', return_value=None), \
              patch.object(si, 'ask_yes_no', return_value=False) as mock_ask:
@@ -146,7 +146,7 @@ class TestEnsureSingleInstance(_LockTestCase):
 
     def test_unknown_version_shows_question_mark(self):
         """A holder record without a version still produces a usable message."""
-        self.directory.joinpath('usage-monitor-for-claude.lock').write_text('4242\n', encoding='utf-8')
+        self.directory.joinpath('usage-monitor-for-codex.lock').write_text('4242\n', encoding='utf-8')
 
         with patch.object(si, '_acquire', return_value=None), \
              patch.object(si, 'ask_yes_no', return_value=False) as mock_ask:
@@ -171,12 +171,12 @@ class TestHolderRecord(_LockTestCase):
 
     def test_empty_file(self):
         """An empty lock file is not a holder."""
-        self.directory.joinpath('usage-monitor-for-claude.lock').write_text('', encoding='utf-8')
+        self.directory.joinpath('usage-monitor-for-codex.lock').write_text('', encoding='utf-8')
         self.assertEqual(si._read_holder_info(), (None, None))
 
     def test_malformed_pid(self):
         """A non-numeric first line is ignored rather than raising."""
-        self.directory.joinpath('usage-monitor-for-claude.lock').write_text('not-a-pid\n1.0\n', encoding='utf-8')
+        self.directory.joinpath('usage-monitor-for-codex.lock').write_text('not-a-pid\n1.0\n', encoding='utf-8')
         self.assertEqual(si._read_holder_info(), (None, None))
 
     def test_zero_pid_is_no_holder_but_keeps_version(self):
@@ -185,12 +185,12 @@ class TestHolderRecord(_LockTestCase):
         Matches the Windows guard, which also reports the version from a
         record whose PID is unusable.
         """
-        self.directory.joinpath('usage-monitor-for-claude.lock').write_text('0\n1.0\n', encoding='utf-8')
+        self.directory.joinpath('usage-monitor-for-codex.lock').write_text('0\n1.0\n', encoding='utf-8')
         self.assertEqual(si._read_holder_info(), (None, '1.0'))
 
     def test_write_truncates_previous_record(self):
         """A shorter record must not leave bytes of the previous one behind."""
-        path = self.directory / 'usage-monitor-for-claude.lock'
+        path = self.directory / 'usage-monitor-for-codex.lock'
         path.write_text('999999999\n99.99.99-longer\n', encoding='utf-8')
         si.ensure_single_instance()
         self.assertEqual(path.read_text(encoding='utf-8'), f'{os.getpid()}\n{si.__version__}\n')

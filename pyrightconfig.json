@@ -1,6 +1,16 @@
 {
-    "venvPath": ".",
-    "venv": ".venv",
+    "include": [
+        "usage_monitor_for_codex/api.py",
+        "usage_monitor_for_codex/cache.py",
+        "usage_monitor_for_codex/codex_cli.py",
+        "usage_monitor_for_codex/formatting.py",
+        "usage_monitor_for_codex/settings.py",
+        "usage_monitor_for_codex/tray_icon.py",
+        "usage_monitor_for_codex/verbose.py",
+        "tools"
+    ],
+    "pythonVersion": "3.10",
+    "typeCheckingMode": "basic",
     "reportUnknownMemberType": false,
     "reportUnknownParameterType": false,
     "reportUnknownArgumentType": false,

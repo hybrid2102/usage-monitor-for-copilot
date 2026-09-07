@@ -18,9 +18,6 @@ dist/
 .vscode/
 .idea/
 
-# Claude Code
-.claude/settings.json
-
 # User settings
 usage-monitor-settings.json
 

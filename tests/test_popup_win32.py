@@ -18,7 +18,7 @@ if sys.platform != 'win32':
 
 import ctypes.wintypes  # noqa: E402
 
-from usage_monitor_for_claude.platforms.popup_win32 import (  # noqa: E402
+from usage_monitor_for_codex.platforms.popup_win32 import (  # noqa: E402
     _BASELINE_DPI, _MONITORINFO, _SWP_NOACTIVATE, _SWP_NOSIZE, _SWP_NOZORDER, PopupHost,
 )
 
@@ -280,7 +280,7 @@ class TestWindowOptions(unittest.TestCase):
         """WebView2 accepts a filesystem path."""
         from pathlib import Path
 
-        from usage_monitor_for_claude.platforms.popup_win32 import popup_url
+        from usage_monitor_for_codex.platforms.popup_win32 import popup_url
 
         self.assertEqual(popup_url(Path(r'C:\app\popup.html')), r'C:\app\popup.html')
 

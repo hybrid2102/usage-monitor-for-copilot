@@ -1,0 +1,43 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+      - name: Install dependencies
+        run: python -m pip install --disable-pip-version-check -r requirements-dev.txt
+      - name: Verify release source
+        run: |
+          python -m unittest discover -s tests -q
+          python -m compileall -q usage_monitor_for_codex
+          python -m pyright
+      - name: Build executable
+        run: python build.py
+      - name: Write SHA-256 checksum
+        shell: pwsh
+        run: |
+          $hash = (Get-FileHash dist/UsageMonitorForCodex.exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  UsageMonitorForCodex.exe" | Set-Content -Encoding ascii dist/UsageMonitorForCodex.exe.sha256
+      - name: Publish GitHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" `
+            dist/UsageMonitorForCodex.exe `
+            dist/UsageMonitorForCodex.exe.sha256 `
+            --verify-tag `
+            --title "Usage Monitor for Codex ${{ github.ref_name }}" `
+            --generate-notes

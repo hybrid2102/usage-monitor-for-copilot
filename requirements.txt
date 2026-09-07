@@ -1,6 +1,4 @@
-pystray
-Pillow
-requests
-truststore
-pywebview
-pyinstaller
+pystray>=0.19.5,<1
+Pillow>=11,<13
+pywebview>=5,<7
+pyinstaller>=6,<7

@@ -1,67 +1,31 @@
-# Privacy Policy
+# Privacy and security
 
-**Usage Monitor for Claude** is a local desktop application that monitors your Claude API usage.
-It runs on Windows and Linux.
+Usage Monitor for Codex is designed to keep authentication inside the official Codex CLI.
 
-## Data Collection
+## Authentication and network access
 
-This application does **not** collect, store, or transmit any personal data.
+The monitor starts the locally installed `codex app-server --stdio` process and exchanges JSONL messages over standard input/output. It requests account metadata and rate-limit snapshots through the documented App Server methods.
 
-## Network Communication
+The monitor itself:
 
-The application communicates exclusively with `api.anthropic.com` to retrieve your current API usage
-data and, when extra usage is enabled for your account, your prepaid credit balance. No other network
-connections are made.
+- does not read Codex credential files;
+- does not receive or store access or refresh tokens;
+- does not inspect browser cookies;
+- does not send telemetry or analytics;
+- does not contact GitHub to check for updates.
 
-The server certificate is verified against the Windows certificate store, the same store your browser
-uses. A proxy that your organization has installed with its own root certificate can therefore inspect
-this connection, as it does in the browser. Windows performs this check itself, as it does for any other
-application, and may download a missing certificate authority certificate in the process.
+The Codex subprocess communicates with OpenAI according to the Codex CLI's own authentication and privacy behavior.
 
-## Credentials
+## Data held in memory
 
-The application reads your existing Claude OAuth token from the local Claude CLI configuration file
-(`~/.claude/.credentials.json`, the same path on both platforms). This token is:
+While running, the application may hold the active account email, plan name, opaque account marker, usage percentages, reset timestamps, and credits metadata returned by App Server. This data is used only to render the tray icon, popup, and optional local notifications. It is not persisted by the monitor.
 
-- Used solely in HTTP Authorization headers to authenticate with the Anthropic API
-- Never logged, stored elsewhere, copied, or transmitted to any third party
+## Local settings and operating-system integration
 
-## Local Storage
+Configuration is read from the project settings location, respecting `CODEX_HOME` when set. If autostart or notification identity is enabled, the application may create the normal Windows registry values or Linux desktop files required for those features.
 
-All usage data is kept in memory only and discarded when the application closes. An optional
-settings file (`usage-monitor-settings.json`) is read-only. The complete list of what the
-application changes on your system follows - there is nothing else.
+Optional event commands are executed locally only when explicitly configured by the user. Their privacy and security impact depends on the commands chosen.
 
-**On Windows** no files are written at all. Two values are written to the registry, both under
-`HKEY_CURRENT_USER`:
+## Reporting issues
 
-- `Software\Classes\AppUserModelId\JensDuttke.UsageMonitorForClaude` - the display name and icon
-  shown in the header of the application's notifications. Re-registered on every start.
-- `Software\Microsoft\Windows\CurrentVersion\Run` - the autostart entry. Written only when you
-  enable autostart from the tray menu, removed when you disable it again.
-
-**On Linux** the registry has no equivalent, so the same two concerns need files:
-
-- `~/.config/autostart/usage-monitor-for-claude.desktop` - the autostart entry. Written only when
-  you enable autostart from the tray menu, removed when you disable it again.
-- `$XDG_RUNTIME_DIR/usage-monitor-for-claude.lock` - a lock file that prevents a second instance
-  from running. It holds the process id and version, is created with owner-only permissions
-  (`0600`), and lives in the session's runtime directory, which the system clears at logout.
-
-Monitoring a second Claude account (`--config-dir`) adds a suffix to those names, so each account
-gets its own entry.
-
-## Claude Code Installation
-
-When the OAuth token has expired, the application runs `claude update` so that the Claude Code CLI
-renews the token in its own credentials file. As a side effect of that command, a newer Claude Code
-version may be installed. No other software on your system is modified.
-
-## Third-Party Services
-
-The application does not integrate with any analytics, tracking, advertising, or telemetry services.
-
-## Contact
-
-For questions about this privacy policy, please open an issue at
-https://github.com/jens-duttke/usage-monitor-for-claude/issues
+Do not attach credential files or access tokens to issue reports. Diagnostic output should be reviewed before sharing because it can contain local paths, software versions, and account metadata.

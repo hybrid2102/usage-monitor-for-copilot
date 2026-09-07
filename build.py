@@ -2,13 +2,13 @@
 Build Script
 =============
 
-Builds a standalone EXE for Usage Monitor for Claude using PyInstaller.
+Builds a standalone EXE for Usage Monitor for Codex using PyInstaller.
 
 Usage:
     python build.py
 
 Produces:
-    dist/UsageMonitorForClaude.exe
+    dist/UsageMonitorForCodex.exe
 """
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).parent
 DIST = ROOT / 'dist'
-SPEC = ROOT / 'usage_monitor_for_claude.spec'
+SPEC = ROOT / 'usage_monitor_for_codex.spec'
 
 
 def build() -> None:
@@ -27,7 +27,7 @@ def build() -> None:
     cmd = [sys.executable, '-m', 'PyInstaller', '--clean', '--noconfirm', str(SPEC)]
     subprocess.check_call(cmd, cwd=str(ROOT))
 
-    exe = DIST / 'UsageMonitorForClaude.exe'
+    exe = DIST / 'UsageMonitorForCodex.exe'
     if exe.exists():
         size_mb = exe.stat().st_size / (1024 * 1024)
         print(f'\nBuild successful!  {exe}  ({size_mb:.1f} MB)')

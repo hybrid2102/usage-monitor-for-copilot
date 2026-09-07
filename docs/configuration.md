@@ -12,9 +12,9 @@ All settings work out of the box - no configuration file is needed. To customize
 
 The app searches for this file in these locations (first match wins):
 
-1. **`$CLAUDE_CONFIG_DIR/usage-monitor-settings.json`** (only if a custom config directory is set via `--config-dir` or `CLAUDE_CONFIG_DIR` and differs from `~/.claude/`) - so each instance can have its own settings
+1. **`$CODEX_HOME/usage-monitor-settings.json`** (only if a custom config directory is set via `--config-dir` or `CODEX_HOME` and differs from `~/.codex/`) - so each instance can have its own settings
 2. **Next to the EXE** (or project root when running from source)
-3. **`~/.claude/usage-monitor-settings.json`**
+3. **`~/.codex/usage-monitor-settings.json`**
 
 The app never creates or modifies this file. Settings are read at startup - after editing the file, use the **Restart** option in the tray context menu to apply changes.
 
@@ -31,44 +31,36 @@ Configure usage percentage thresholds that trigger desktop notifications. Sessio
 | `alert_time_aware` | `true` | Only alert when usage outpaces elapsed time |
 | `alert_time_aware_below` | `90` | Time-aware check applies only to thresholds below this value; thresholds at or above always fire |
 
-Threshold lookup uses a fallback chain: exact match (e.g. `alert_thresholds_seven_day_opus`), then base period (e.g. `alert_thresholds_seven_day`), then no alerts. This lets you configure stricter thresholds per variant when needed:
+Threshold lookup uses a fallback chain: exact match (for example an additional named App Server bucket), then its base period, then no alerts. This lets you configure stricter thresholds per bucket when needed:
 
 ```json
 {
-    "alert_thresholds_seven_day_opus": [50, 80, 95]
+    "alert_thresholds_one_hour_code_review": [50, 80, 95]
 }
 ```
 
-## Update notification
+## Codex CLI command
 
-When a background token refresh installs a new Claude CLI version, the app shows a desktop notification reporting the version change. Set this to `false` to suppress that notification.
-
-| Key | Default | Description |
-|-----|---------|-------------|
-| `notify_claude_update` | `true` | Show a notification when a background token refresh installs a new Claude CLI version |
-
-## Claude CLI command
-
-The popup lists the Claude Code version of the natively installed CLI and of each IDE extension it finds. Installs it cannot see - most commonly a Claude Code running inside WSL - are missing from that list. Use `cli_command` to have their versions reported as well.
+The popup lists the Codex version of the natively installed CLI and of each IDE extension it finds. Installs it cannot see - most commonly a Codex running inside WSL - are missing from that list. Use `cli_command` to have their versions reported as well.
 
 The value is an object mapping a display name to the base command as an array of arguments (the app appends `--version` itself). Each entry is listed in the popup under the name you give it, **in addition to** the native CLI and the IDE extensions.
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `cli_command` | *(none)* | Object mapping a display name to a base command (array of strings) whose Claude Code version is reported alongside the auto-detected ones, e.g. a WSL install |
+| `cli_command` | *(none)* | Object mapping a display name to a base command (array of strings) whose Codex version is reported alongside the auto-detected ones, e.g. a WSL install |
 
 ```json
 {
     "cli_command": {
-        "WSL": ["wsl", "/home/<user>/.local/bin/claude"]
+        "WSL": ["wsl", "/home/<user>/.local/bin/codex"]
     }
 }
 ```
 
-An entry only appears once its command reports a version, so if it stays missing, run the command yourself in a terminal - `wsl /home/<user>/.local/bin/claude --version` has to print a version number.
+An entry only appears once its command reports a version, so if it stays missing, run the command yourself in a terminal - `wsl /home/<user>/.local/bin/codex --version` has to print a version number.
 
-- **This setting is display only.** Automatic token refresh keeps using the natively installed CLI, whose credentials this app reads.
-- **The version is read once per app start.** After updating Claude Code inside WSL, restart the app to see the new version.
+- **This setting is display only.** Authentication always stays in the natively installed CLI's App Server; the monitor never reads its credentials.
+- **The version is read once per app start.** After updating Codex inside WSL, restart the app to see the new version.
 
 ## Tooltip fields
 
@@ -80,13 +72,13 @@ The tray tooltip shows a quick usage summary when you hover over the icon. By de
 
 Must be an array of non-empty strings. Duplicates are silently removed. An empty array `[]` is valid (tooltip shows only the title, no usage fields). Unknown field names are accepted - if a field is `null` or missing from the API response, it is simply skipped.
 
-**Known field names:** `five_hour`, `seven_day`, `seven_day_sonnet`, `seven_day_opus`, `seven_day_cowork`, `seven_day_oauth_apps`
+**Common field names:** `five_hour`, `seven_day`. Additional named buckets exposed by App Server receive normalized names such as `one_hour_code_review`.
 
-**Example** - show session and Sonnet quota in the tooltip:
+**Example** - show the two standard windows in the tooltip:
 
 ```json
 {
-    "tooltip_fields": ["five_hour", "seven_day_sonnet"]
+    "tooltip_fields": ["five_hour", "seven_day"]
 }
 ```
 
@@ -100,7 +92,7 @@ The popup shows usage bars for all active quota types by default. Use `popup_fie
 
 Must be an array of non-empty strings. `"*"` may appear at most once. Duplicates are silently removed. Unknown field names are accepted - if a field is `null` or missing from the API response, it is simply skipped.
 
-**Known field names:** `five_hour`, `seven_day`, `seven_day_sonnet`, `seven_day_opus`, `seven_day_cowork`, `seven_day_oauth_apps`
+**Common field names:** `five_hour`, `seven_day`. Additional named buckets exposed by App Server are included automatically by `"*"`.
 
 **Default order** (used for `"*"` and when no setting is present): shorter periods first (`hour` before `day`), base field before variants, variants alphabetically.
 
@@ -109,13 +101,13 @@ Must be an array of non-empty strings. `"*"` may appear at most once. Duplicates
 | Setting | Result |
 |---------|--------|
 | *(not set)* | All non-null fields in default order |
-| `["five_hour", "seven_day_sonnet", "*"]` | Session first, then Sonnet, then all remaining |
+| `["seven_day", "*"]` | Weekly first, then all remaining fields |
 | `["five_hour", "seven_day"]` | Only these two, everything else hidden |
 | `["*"]` | Same as not set |
 
 ```json
 {
-    "popup_fields": ["five_hour", "seven_day_sonnet", "*"]
+    "popup_fields": ["seven_day", "*"]
 }
 ```
 
@@ -131,15 +123,15 @@ Must be an array of non-empty strings. Duplicates are silently removed. Unknown 
 
 Entries can be either a **section key** or a **usage field name**:
 
-**Section keys:** `account` (email and plan), `extra_usage` (paid overage bar and prepaid credit balance), `claude_code` (installed versions), `status` (the footer with the update time). The usage bar section itself cannot be hidden as a whole - hide individual bars by their field name instead. When nothing but the usage bars is left, the "Usage" heading is dropped automatically.
+**Section keys:** `account` (email and plan), `extra_usage` (paid overage bar and prepaid credit balance), `codex_code` (installed versions), `status` (the footer with the update time). The usage bar section itself cannot be hidden as a whole - hide individual bars by their field name instead. When nothing but the usage bars is left, the "Usage" heading is dropped automatically.
 
-**Usage field names:** any quota field, e.g. `five_hour`, `seven_day`, `seven_day_sonnet`, `seven_day_opus`, `seven_day_cowork`, `seven_day_oauth_apps`. This hides that single bar in the pinned view, independent of [`popup_fields`](#popup-fields) (which controls the normal, unpinned popup).
+**Usage field names:** any normalized quota field, for example `five_hour`, `seven_day`, or `one_hour_code_review`. This hides that single bar in the pinned view, independent of [`popup_fields`](#popup-fields) (which controls the normal, unpinned popup).
 
 **Example** - pin to a minimal view with only the session and weekly bars:
 
 ```json
 {
-    "compact_hide": ["account", "extra_usage", "claude_code", "status", "seven_day_sonnet", "seven_day_opus"]
+    "compact_hide": ["account", "extra_usage", "codex_code", "status", "one_hour_code_review"]
 }
 ```
 
@@ -154,7 +146,7 @@ The tray icon displays two small progress bars. By default, these show the sessi
 
 Must be an array of exactly 2 non-empty strings. Unknown field names are accepted - if a field is `null` or missing from the API response, the bar shows 0%.
 
-**Known field names:** `five_hour`, `seven_day`, `seven_day_sonnet`, `seven_day_opus`, `seven_day_cowork`, `seven_day_oauth_apps`
+**Common field names:** `five_hour`, `seven_day`, plus any normalized named buckets returned by App Server.
 
 Each entry can optionally include a display mode suffix using colon syntax: `"field_name:mode"`.
 
@@ -167,7 +159,7 @@ Each entry can optionally include a display mode suffix using colon syntax: `"fi
 
 In `utilization` mode, each bar also shows a thin vertical marker at the elapsed-time position of the quota period - the same information as the time marker in the detail popup. When usage is ahead of the elapsed time (or fully exhausted), the bar fill switches to the warning color (`fg_warn` in [Tray icon colors](#tray-icon-colors)), matching the popup's red warning fill.
 
-**The `"numbers"` style** replaces the bars with a second percentage: the first `icon_fields` entry becomes the top row, the second the bottom row. Each row follows the same rules as the classic icon text - an exhausted quota shows `✕` (or `$` when paid extra usage is still available), and when both are exhausted the icon collapses to a single full-size `✕`/`$`. The time marker, the warning color, and the `:overage` suffix have no effect in this style; while both quotas are at 0% the icon shows the usual idle "C".
+**The `"numbers"` style** replaces the bars with a second percentage: the first `icon_fields` entry becomes the top row, the second the bottom row. Each row follows the same rules as the classic icon text - an exhausted quota shows `✕` (or `$` when paid extra usage is still available), and when both are exhausted the icon collapses to a single full-size `✕`/`$`. The time marker, the warning color, and the `:overage` suffix have no effect in this style; while both quotas are at 0% the icon shows the idle terminal prompt `>`.
 
 **Example** - show session and weekly usage as two stacked percentages:
 
@@ -185,11 +177,11 @@ In `utilization` mode, each bar also shows a thin vertical marker at the elapsed
 }
 ```
 
-**Example** - show session and Sonnet quota (default utilization mode):
+**Example** - show session and an optional code-review bucket:
 
 ```json
 {
-    "icon_fields": ["five_hour", "seven_day_sonnet"]
+    "icon_fields": ["five_hour", "one_hour_code_review"]
 }
 ```
 
@@ -202,7 +194,7 @@ Run a shell command when a usage event occurs. See [Event Commands](event-comman
 | `on_reset_command` | *(none)* | Shell command (or array of commands) to run when a quota resets (usage drops) |
 | `on_startup_command` | *(none)* | Shell command (or array of commands) to run once after the first successful API update following app start |
 | `on_threshold_command` | *(none)* | Shell command (or array of commands) to run when usage crosses a configured alert threshold |
-| `quick_action_command` | *(none)* | Shell command (or array of commands) to run when you trigger the quick action (e.g. launch [Agent Monitor for Claude](https://github.com/jens-duttke/agent-monitor-for-claude)). Triggered by a double-click on the tray icon, or by the **Run Quick Action** menu entry where the desktop keeps the click. Formerly `on_double_click_command`, which still works |
+| `quick_action_command` | *(none)* | Shell command (or array of commands) to run when you trigger the quick action. Triggered by a double-click on the tray icon, or by the **Run Quick Action** menu entry where the desktop keeps the click. Formerly `on_double_click_command`, which still works |
 
 ## Polling intervals
 
@@ -232,7 +224,7 @@ By default, reset times follow your system's clock format (the 24-hour or 12-hou
 
 ## Currency
 
-The app shows extra usage amounts in the billing currency the Anthropic API reports for your account (its symbol and decimal precision), falling back to your system locale's currency symbol when the API does not report one. An override set here always wins. Number formatting (decimal separator, symbol position) always follows your system locale.
+When App Server provides a monetary credits balance, the app formats it using the supplied currency metadata and falls back to the system locale. An override set here always wins. Number formatting follows the system locale.
 
 | Key | Default | Description |
 |-----|---------|-------------|

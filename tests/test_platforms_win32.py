@@ -15,7 +15,7 @@ from unittest.mock import MagicMock, call, patch
 if sys.platform != 'win32':
     raise unittest.SkipTest('Win32 backend is only importable on Windows')
 
-import usage_monitor_for_claude.platforms.win32 as win32  # noqa: E402
+import usage_monitor_for_codex.platforms.win32 as win32  # noqa: E402
 
 
 class TestNoWindowKwargs(unittest.TestCase):
@@ -471,7 +471,7 @@ class TestCustomConfigDirAutostart(unittest.TestCase):
     def setUp(self):
         patcher_suffix = patch.object(win32, 'config_dir_suffix', return_value='_abc123def456')
         patcher_default = patch.object(win32, 'is_default_config_dir', return_value=False)
-        patcher_env = patch.dict('os.environ', {'CLAUDE_CONFIG_DIR': r'C:\Users\test\.claude-second'})
+        patcher_env = patch.dict('os.environ', {'CODEX_HOME': r'C:\Users\test\.codex-second'})
         patcher_suffix.start()
         patcher_default.start()
         patcher_env.start()
@@ -489,7 +489,7 @@ class TestCustomConfigDirAutostart(unittest.TestCase):
         win32.set_autostart(True)
 
         name = mock_winreg.SetValueEx.call_args[0][1]
-        self.assertEqual(name, 'UsageMonitorForClaude_abc123def456')
+        self.assertEqual(name, 'UsageMonitorForCodex_abc123def456')
 
     @patch.object(win32, 'winreg')
     def test_enable_command_includes_config_dir(self, mock_winreg):
@@ -501,7 +501,7 @@ class TestCustomConfigDirAutostart(unittest.TestCase):
         win32.set_autostart(True)
 
         command = mock_winreg.SetValueEx.call_args[0][4]
-        self.assertEqual(command, f'"{sys.executable}" --config-dir="C:\\Users\\test\\.claude-second"')
+        self.assertEqual(command, f'"{sys.executable}" --config-dir="C:\\Users\\test\\.codex-second"')
 
     @patch.object(win32, 'winreg')
     def test_disable_deletes_suffixed_value(self, mock_winreg):
@@ -512,7 +512,7 @@ class TestCustomConfigDirAutostart(unittest.TestCase):
 
         win32.set_autostart(False)
 
-        mock_winreg.DeleteValue.assert_called_once_with(mock_key, 'UsageMonitorForClaude_abc123def456')
+        mock_winreg.DeleteValue.assert_called_once_with(mock_key, 'UsageMonitorForCodex_abc123def456')
 
     @patch.object(win32, 'set_autostart')
     @patch.object(win32, 'winreg')
@@ -521,7 +521,7 @@ class TestCustomConfigDirAutostart(unittest.TestCase):
         mock_key = MagicMock()
         mock_winreg.OpenKey.return_value.__enter__ = MagicMock(return_value=mock_key)
         mock_winreg.OpenKey.return_value.__exit__ = MagicMock(return_value=False)
-        stored = f'"{sys.executable}" --config-dir="C:\\Users\\test\\.claude-second"'
+        stored = f'"{sys.executable}" --config-dir="C:\\Users\\test\\.codex-second"'
         mock_winreg.QueryValueEx.return_value = (stored, 1)
 
         win32.sync_autostart_path()
@@ -630,7 +630,7 @@ class TestWebview2Version(unittest.TestCase):
     def test_runtime_found(self):
         """Returns version when Runtime GUID is in registry."""
         runtime_guid = '{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}'
-        with patch('usage_monitor_for_claude.platforms.win32.winreg') as mock_winreg:
+        with patch('usage_monitor_for_codex.platforms.win32.winreg') as mock_winreg:
             mock_winreg.HKEY_CURRENT_USER = 0x80000001
             mock_winreg.HKEY_LOCAL_MACHINE = 0x80000002
             mock_winreg.OpenKey = self._mock_open_key([(runtime_guid, '130.0.2849.56')])
@@ -641,7 +641,7 @@ class TestWebview2Version(unittest.TestCase):
     def test_beta_channel_labeled(self):
         """Non-Runtime channels include the channel name."""
         beta_guid = '{2CD8A007-E189-409D-A2C8-9AF4EF3C72AA}'
-        with patch('usage_monitor_for_claude.platforms.win32.winreg') as mock_winreg:
+        with patch('usage_monitor_for_codex.platforms.win32.winreg') as mock_winreg:
             mock_winreg.HKEY_CURRENT_USER = 0x80000001
             mock_winreg.HKEY_LOCAL_MACHINE = 0x80000002
             mock_winreg.OpenKey = self._mock_open_key([(beta_guid, '131.0.0.1')])
@@ -652,7 +652,7 @@ class TestWebview2Version(unittest.TestCase):
 
     def test_not_found(self):
         """Returns 'not found' when no registry keys exist."""
-        with patch('usage_monitor_for_claude.platforms.win32.winreg') as mock_winreg:
+        with patch('usage_monitor_for_codex.platforms.win32.winreg') as mock_winreg:
             mock_winreg.HKEY_CURRENT_USER = 0x80000001
             mock_winreg.HKEY_LOCAL_MACHINE = 0x80000002
             mock_winreg.OpenKey = MagicMock(side_effect=OSError)
@@ -662,7 +662,7 @@ class TestWebview2Version(unittest.TestCase):
     def test_zero_version_skipped(self):
         """Version '0.0.0.0' is treated as not installed."""
         runtime_guid = '{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}'
-        with patch('usage_monitor_for_claude.platforms.win32.winreg') as mock_winreg:
+        with patch('usage_monitor_for_codex.platforms.win32.winreg') as mock_winreg:
             mock_winreg.HKEY_CURRENT_USER = 0x80000001
             mock_winreg.HKEY_LOCAL_MACHINE = 0x80000002
             mock_winreg.OpenKey = self._mock_open_key([(runtime_guid, '0.0.0.0')])
@@ -676,7 +676,7 @@ class TestDotnetVersion(unittest.TestCase):
 
     def test_dotnet_481(self):
         """Release >= 533320 reports 4.8.1."""
-        with patch('usage_monitor_for_claude.platforms.win32.winreg') as mock_winreg:
+        with patch('usage_monitor_for_codex.platforms.win32.winreg') as mock_winreg:
             mock_key = MagicMock()
             mock_winreg.OpenKey = MagicMock(return_value=mock_key)
             mock_key.__enter__ = MagicMock(return_value=mock_key)
@@ -688,7 +688,7 @@ class TestDotnetVersion(unittest.TestCase):
 
     def test_dotnet_462(self):
         """Release >= 394802 reports 4.6.2."""
-        with patch('usage_monitor_for_claude.platforms.win32.winreg') as mock_winreg:
+        with patch('usage_monitor_for_codex.platforms.win32.winreg') as mock_winreg:
             mock_key = MagicMock()
             mock_winreg.OpenKey = MagicMock(return_value=mock_key)
             mock_key.__enter__ = MagicMock(return_value=mock_key)
@@ -699,7 +699,7 @@ class TestDotnetVersion(unittest.TestCase):
 
     def test_dotnet_below_46(self):
         """Release below 393295 reports < 4.6."""
-        with patch('usage_monitor_for_claude.platforms.win32.winreg') as mock_winreg:
+        with patch('usage_monitor_for_codex.platforms.win32.winreg') as mock_winreg:
             mock_key = MagicMock()
             mock_winreg.OpenKey = MagicMock(return_value=mock_key)
             mock_key.__enter__ = MagicMock(return_value=mock_key)
@@ -710,7 +710,7 @@ class TestDotnetVersion(unittest.TestCase):
 
     def test_dotnet_not_found(self):
         """Missing registry key returns 'not found'."""
-        with patch('usage_monitor_for_claude.platforms.win32.winreg') as mock_winreg:
+        with patch('usage_monitor_for_codex.platforms.win32.winreg') as mock_winreg:
             mock_winreg.OpenKey = MagicMock(side_effect=OSError)
             result = win32._dotnet_version()
         self.assertEqual(result, 'not found')
@@ -721,7 +721,7 @@ class TestDpiInfo(unittest.TestCase):
 
     def test_per_monitor_v2_150_percent(self):
         """Reports Per-Monitor V2 and 150% scaling."""
-        with patch('usage_monitor_for_claude.platforms.win32.ctypes') as mock_ctypes:
+        with patch('usage_monitor_for_codex.platforms.win32.ctypes') as mock_ctypes:
             user32 = mock_ctypes.windll.user32
             user32.GetThreadDpiAwarenessContext.return_value = -4
             user32.GetAwarenessFromDpiAwarenessContext.return_value = 2
@@ -732,7 +732,7 @@ class TestDpiInfo(unittest.TestCase):
 
     def test_system_aware_100_percent(self):
         """Reports System aware and 100% scaling."""
-        with patch('usage_monitor_for_claude.platforms.win32.ctypes') as mock_ctypes:
+        with patch('usage_monitor_for_codex.platforms.win32.ctypes') as mock_ctypes:
             user32 = mock_ctypes.windll.user32
             user32.GetThreadDpiAwarenessContext.return_value = -2
             user32.GetAwarenessFromDpiAwarenessContext.return_value = 1
@@ -743,7 +743,7 @@ class TestDpiInfo(unittest.TestCase):
 
     def test_unavailable_on_error(self):
         """Returns 'unavailable' when API calls fail."""
-        with patch('usage_monitor_for_claude.platforms.win32.ctypes') as mock_ctypes:
+        with patch('usage_monitor_for_codex.platforms.win32.ctypes') as mock_ctypes:
             user32 = mock_ctypes.windll.user32
             user32.GetThreadDpiAwarenessContext.side_effect = Exception('no API')
             user32.GetDpiForSystem.side_effect = Exception('no API')
@@ -757,7 +757,7 @@ class TestScreenInfo(unittest.TestCase):
 
     def test_normal_values(self):
         """Returns formatted monitor count, resolution, and work area."""
-        with patch('usage_monitor_for_claude.platforms.win32.ctypes') as mock_ctypes:
+        with patch('usage_monitor_for_codex.platforms.win32.ctypes') as mock_ctypes:
             user32 = mock_ctypes.windll.user32
             user32.GetSystemMetrics.side_effect = lambda x: {80: 2, 0: 2560, 1: 1440}[x]
 
@@ -773,7 +773,7 @@ class TestScreenInfo(unittest.TestCase):
 
     def test_unavailable_on_error(self):
         """Returns 'unavailable' when system calls fail."""
-        with patch('usage_monitor_for_claude.platforms.win32.ctypes') as mock_ctypes:
+        with patch('usage_monitor_for_codex.platforms.win32.ctypes') as mock_ctypes:
             user32 = mock_ctypes.windll.user32
             user32.GetSystemMetrics.side_effect = Exception('fail')
             mock_ctypes.wintypes.RECT.side_effect = Exception('fail')
