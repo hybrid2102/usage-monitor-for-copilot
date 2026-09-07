@@ -699,6 +699,17 @@ class TestReportHeight(unittest.TestCase):
         popup = api._popup
         self.addCleanup(popup._closed.set)
 
+        # __init__ assigns self._host on the line right after the create_window
+        # call this loop above waits on - a real gap between the two, not an
+        # artifact of mocking. Waiting only for create_window.called races
+        # against that assignment (observed flaky on CI: AttributeError on
+        # Python 3.11, passing on 3.13 in the same run - interpreter timing,
+        # not test logic). Close the actual window being raced on.
+        deadline = time.time() + 2.0
+        while not hasattr(popup, '_host') and time.time() < deadline:
+            time.sleep(0.01)
+        self.assertTrue(hasattr(popup, '_host'))
+
         return popup, api
 
     def test_first_report_at_initial_window_height_reveals_popup(self):
