@@ -1,9 +1,9 @@
 #!/bin/sh
-# Start Usage Monitor for Codex without activating the virtual environment
+# Start Usage Monitor for Copilot without activating the virtual environment
 # first, and from any working directory.
 #
 # Symlink it somewhere on your PATH to get a global command:
-#     ln -s "$PWD/usage-monitor-for-codex" ~/.local/bin/usage-monitor-for-codex
+#     ln -s "$PWD/usage-monitor-for-copilot" ~/.local/bin/usage-monitor-for-copilot
 #
 # The symlink is resolved before the directory is taken, so the script finds its
 # own checkout rather than wherever it was called from.  PYTHONPATH, not a "cd",
@@ -19,4 +19,4 @@ if [ ! -x "$here/.venv/bin/python" ]; then
     exit 1
 fi
 
-PYTHONPATH="$here${PYTHONPATH:+:$PYTHONPATH}" exec "$here/.venv/bin/python" -m usage_monitor_for_codex "$@"
+PYTHONPATH="$here${PYTHONPATH:+:$PYTHONPATH}" exec "$here/.venv/bin/python" -m usage_monitor_for_copilot "$@"

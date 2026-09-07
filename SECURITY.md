@@ -12,4 +12,4 @@ Include the affected version, operating system, reproduction steps, and expected
 
 ## Authentication boundary
 
-Usage Monitor for Codex delegates authentication to the installed Codex CLI through App Server. A report that shows the monitor reading or persisting Codex credentials is considered security-sensitive.
+Usage Monitor for Copilot delegates authentication to the installed Copilot CLI through `copilot --server`. A report that shows the monitor reading or persisting Copilot credentials, or that shows the `copilot --server` subprocess accepting a connection without the monitor's own per-run connection token, is considered security-sensitive.

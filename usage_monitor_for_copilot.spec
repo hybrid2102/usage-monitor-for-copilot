@@ -1,26 +1,26 @@
 # -*- mode: python ; coding: utf-8 -*-
 """
-PyInstaller spec file for Usage Monitor for Codex.
+PyInstaller spec file for Usage Monitor for Copilot.
 
 Build:
-  pyinstaller usage_monitor_for_codex.spec
+  pyinstaller usage_monitor_for_copilot.spec
 """
 
 a = Analysis(
-    ['usage_monitor_for_codex/__main__.py'],
+    ['usage_monitor_for_copilot/__main__.py'],
     pathex=[],
     binaries=[],
     datas=[
         ('locale/*.json', 'locale'),
-        ('usage_monitor_for_codex/notification_logo.ico', 'usage_monitor_for_codex'),
-        ('usage_monitor_for_codex/popup/popup.html', 'usage_monitor_for_codex/popup'),
-        ('usage_monitor_for_codex/popup/popup.css', 'usage_monitor_for_codex/popup'),
-        ('usage_monitor_for_codex/popup/popup.js', 'usage_monitor_for_codex/popup'),
+        ('usage_monitor_for_copilot/notification_logo.ico', 'usage_monitor_for_copilot'),
+        ('usage_monitor_for_copilot/popup/popup.html', 'usage_monitor_for_copilot/popup'),
+        ('usage_monitor_for_copilot/popup/popup.css', 'usage_monitor_for_copilot/popup'),
+        ('usage_monitor_for_copilot/popup/popup.js', 'usage_monitor_for_copilot/popup'),
     ],
     hiddenimports=[
-        'usage_monitor_for_codex.platforms.win32',
-        'usage_monitor_for_codex.platforms.instance_win32',
-        'usage_monitor_for_codex.platforms.popup_win32',
+        'usage_monitor_for_copilot.platforms.win32',
+        'usage_monitor_for_copilot.platforms.instance_win32',
+        'usage_monitor_for_copilot.platforms.popup_win32',
         'pystray._win32',
         'pystray._util',
         'pystray._util.win32',
@@ -37,9 +37,9 @@ a = Analysis(
         # The platform layer dispatches on sys.platform, but PyInstaller walks
         # both branches.  Excluding the Linux backends keeps the EXE small and
         # avoids pulling in POSIX-only modules such as fcntl and gi.
-        'usage_monitor_for_codex.platforms.linux',
-        'usage_monitor_for_codex.platforms.instance_linux',
-        'usage_monitor_for_codex.platforms.popup_linux',
+        'usage_monitor_for_copilot.platforms.linux',
+        'usage_monitor_for_copilot.platforms.instance_linux',
+        'usage_monitor_for_copilot.platforms.popup_linux',
         'fcntl', 'gi',
         'unittest', 'test',
         'xmlrpc', 'pydoc',
@@ -63,7 +63,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='UsageMonitorForCodex',
+    name='UsageMonitorForCopilot',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -73,6 +73,6 @@ exe = EXE(
     console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
-    icon='usage_monitor_for_codex.ico',
+    icon='usage_monitor_for_copilot.ico',
     version='version_info.py',
 )

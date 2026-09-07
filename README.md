@@ -1,38 +1,34 @@
-<p align="center"><img src="docs/icon.png" width="128" alt="Usage Monitor for Codex icon"></p>
+# Usage Monitor for Copilot
 
-# Usage Monitor for Codex
-
-[![CI](https://github.com/hybrid2102/usage-monitor-for-codex/actions/workflows/ci.yml/badge.svg)](https://github.com/hybrid2102/usage-monitor-for-codex/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/hybrid2102/usage-monitor-for-codex?display_name=tag)](https://github.com/hybrid2102/usage-monitor-for-codex/releases/latest)
+[![CI](https://github.com/hybrid2102/usage-monitor-for-copilot/actions/workflows/ci.yml/badge.svg)](https://github.com/hybrid2102/usage-monitor-for-copilot/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/hybrid2102/usage-monitor-for-copilot?display_name=tag)](https://github.com/hybrid2102/usage-monitor-for-copilot/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-Unofficial system-tray monitor for ChatGPT Codex usage limits, available for Windows and experimentally for Linux.
+Unofficial system-tray monitor for GitHub Copilot usage quotas, available for Windows and experimentally for Linux.
 
 ## Features
 
-- Primary and secondary Codex rate-limit windows, normally 5 hours and 7 days
-- Named additional rate-limit buckets when provided by Codex App Server
-- Reset times, usage percentages, time-aware warnings, and desktop notifications
-- Active ChatGPT account and plan
-- Codex CLI and IDE extension versions
+- Per-category Copilot quota usage - chat, code completions, and premium requests, whichever categories your plan includes - with unlimited entitlements shown as such instead of a meaningless percentage
+- Tray icon focused on premium-request usage by default, since chat and code-completion quotas are frequently unlimited on paid plans while premium requests are the one most likely to run out
+- Usage percentages and desktop notifications when a quota crosses a configured threshold
+- GitHub Copilot CLI version
 - Configurable popup, tray fields, autostart, and local event commands
-- Short retries and privacy-safe messages for transient usage-service failures
+- Short retries and privacy-safe messages for transient Copilot CLI failures
 
 ## Privacy-first integration
 
-The monitor launches `codex app-server --stdio` and requests:
+The monitor launches `copilot --server` with a random connection token set only in the subprocess's environment, completes the CLI's `connect` handshake with that token, and requests:
 
-- `account/read` for the active account and plan;
-- `account/rateLimits/read` for current usage windows.
+- `account.getQuota` for the current chat, code-completion, and premium-request usage snapshot.
 
-Authentication and token refresh stay entirely inside the official Codex process. The monitor does not read `auth.json`, access tokens, refresh tokens, or browser cookies. See [Privacy and security](PRIVACY.md).
+Authentication stays entirely inside the official Copilot CLI. The monitor does not read Copilot credential files, access tokens, or browser cookies. See [Privacy and security](PRIVACY.md).
 
-API-key logins are not supported because ChatGPT subscription limits are account-scoped.
+Only the Copilot CLI's own sign-in is supported; this monitor never accepts, stores, or reads an API key or personal access token.
 
 ## Install on Windows
 
-1. Install Codex and sign in with ChatGPT using `codex login`.
-2. Download `UsageMonitorForCodex.exe` from the [latest release](https://github.com/hybrid2102/usage-monitor-for-codex/releases/latest).
+1. Install the GitHub Copilot CLI and sign in with `copilot login`.
+2. Download `UsageMonitorForCopilot.exe` from the [latest release](https://github.com/hybrid2102/usage-monitor-for-copilot/releases/latest).
 3. Run the executable; no Python installation is required.
 
 The initial executable is unsigned, so Windows SmartScreen may display a warning. Verify its SHA-256 against the checksum attached to the same GitHub release.
@@ -43,29 +39,30 @@ The initial executable is unsigned, so Windows SmartScreen may display a warning
 python -m venv .venv
 .venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
-python -m usage_monitor_for_codex
+python -m usage_monitor_for_copilot
 ```
 
-On Linux, use the equivalent virtual-environment activation command and install the desktop packages required by `pystray` and `pywebview`. The Linux launcher is `usage-monitor-for-codex`.
+On Linux, use the equivalent virtual-environment activation command and install the desktop packages required by `pystray` and `pywebview`. The Linux launcher is `usage-monitor-for-copilot`.
 
 ## Development
 
 ```powershell
 python -m unittest discover -s tests -q
-python -m compileall -q usage_monitor_for_codex
+python -m compileall -q usage_monitor_for_copilot
 python build.py
 ```
 
-See [configuration](docs/configuration.md), [event commands](docs/event-commands.md), [App Server integration](docs/api-reference.md), and [contributing](CONTRIBUTING.md).
+See [configuration](docs/configuration.md), [event commands](docs/event-commands.md), [Copilot CLI integration](docs/api-reference.md), and [contributing](CONTRIBUTING.md).
 
 ## Current limitations
 
 - Windows is the primary tested platform; Linux support is experimental.
-- Codex App Server evolves with the Codex CLI, so a recent CLI version is recommended.
+- The Copilot CLI's `--server` mode is not publicly documented, so its protocol may change between CLI releases.
+- No reset countdown is shown for Copilot quotas: the CLI's own reset timestamp was found to track the moment of the request rather than a real billing-cycle boundary, so it cannot be trusted until GitHub's API reports a reliable one.
 - The executable is not code-signed.
 
 ## Attribution
 
 Derived from [Usage Monitor for Claude](https://github.com/jens-duttke/usage-monitor-for-claude). Its Git history and original MIT copyright notice are preserved.
 
-This independent community project is not created, endorsed, or supported by OpenAI.
+This independent community project is not created, endorsed, or supported by GitHub or Microsoft.

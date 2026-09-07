@@ -1,9 +1,9 @@
 """
-Codex CLI
-===========
+Copilot CLI
+=============
 
-Discovers Codex installations on the system. Authentication is owned by the
-Codex CLI/App Server; this module never reads credentials.
+Discovers GitHub Copilot CLI installations on the system. Authentication is
+owned by the Copilot CLI; this module never reads credentials.
 """
 from __future__ import annotations
 
@@ -19,22 +19,23 @@ from .settings import CLI_COMMAND
 
 
 def _discover_cli_path() -> Path:
-    """Discover the Codex CLI binary path.
+    """Discover the GitHub Copilot CLI binary path.
 
     Strategy
     --------
-    1. ``shutil.which('codex')`` - respects PATH and PATHEXT.  A typical
-       npm install resolves to ``codex.cmd`` in ``%APPDATA%\\npm`` because
+    1. ``shutil.which('copilot')`` - respects PATH and PATHEXT.  A typical
+       npm install resolves to ``copilot.cmd`` in ``%APPDATA%\\npm`` because
        ``.CMD`` is in the default PATHEXT.
     2. If the result is a ``.ps1`` shim (uncommon - happens when the user
        has added ``.PS1`` to PATHEXT), substitute the sibling ``.cmd`` or
        ``.exe``; subprocess cannot directly execute PowerShell scripts.
     3. Fall back to the standard npm location at ``%APPDATA%\\npm``.
-    4. Check the Codex Desktop managed binary directory.
-    5. Last resort: return the native installer path so callers'
-       ``is_file()`` checks fail gracefully and produce sensible logs.
+    4. Last resort: return GitHub's documented bash-installer path
+       (``~/.local/bin/copilot``, no extension - that installer targets
+       macOS/Linux) so callers' ``is_file()`` checks fail gracefully on
+       Windows instead of raising.
     """
-    found = shutil.which('codex')
+    found = shutil.which('copilot')
     if found:
         path = Path(found)
         if path.suffix.lower() == '.ps1':
@@ -46,39 +47,29 @@ def _discover_cli_path() -> Path:
 
     appdata = os.environ.get('APPDATA')
     if appdata:
-        for name in ('codex.cmd', 'codex.exe'):
+        for name in ('copilot.cmd', 'copilot.exe'):
             candidate = Path(appdata) / 'npm' / name
             if candidate.is_file():
                 return candidate
 
-    local_appdata = os.environ.get('LOCALAPPDATA')
-    if local_appdata:
-        managed_bin = Path(local_appdata) / 'OpenAI' / 'Codex' / 'bin'
-        try:
-            candidates = sorted(managed_bin.glob('*/codex.exe'), key=lambda p: p.stat().st_mtime, reverse=True)
-            if candidates:
-                return candidates[0]
-        except OSError:
-            pass
-
-    return Path.home() / '.local' / 'bin' / 'codex.exe'
+    return Path.home() / '.local' / 'bin' / 'copilot'
 
 
 # Resolved at import time. The CLI path doesn't move during runtime.
-CODEX_CLI_PATH = _discover_cli_path()
+COPILOT_CLI_PATH = _discover_cli_path()
 
-_EXTENSION_DIRS: list[tuple[str, Path]] = [
-    ('VS Code', Path.home() / '.vscode' / 'extensions'),
-    ('VS Code Insiders', Path.home() / '.vscode-insiders' / 'extensions'),
-    ('Cursor', Path.home() / '.cursor' / 'extensions'),
-    ('Windsurf', Path.home() / '.windsurf' / 'extensions'),
-]
-_EXTENSION_PREFIXES = ('openai.chatgpt-', 'openai.codex-')
+# TODO: IDE-extension scanning (VS Code "GitHub.copilot" / "GitHub.copilot-chat")
+# is intentionally omitted for this first version. Codex's twin matches a
+# lowercased "publisher.name-X.Y.Z" directory prefix for its own IDE
+# extensions, and GitHub Copilot's two extensions would very likely follow
+# the same on-disk convention - but that has not been verified against a
+# real install, and this codebase's policy is to encode only verified
+# facts. Add it once someone can check an actual extensions directory.
 
-CHANGELOG_URL = 'https://github.com/openai/codex/releases'
-PROJECT_URL = 'https://github.com/hybrid2102/usage-monitor-for-codex'
+CHANGELOG_URL = 'https://github.com/github/copilot-cli/releases'
+PROJECT_URL = 'https://github.com/hybrid2102/usage-monitor-for-copilot'
 
-__all__ = ['CODEX_CLI_PATH', 'CHANGELOG_URL', 'PROJECT_URL', 'CodexInstallation', 'RefreshResult', 'cli_version', 'find_installations', 'refresh_token']
+__all__ = ['COPILOT_CLI_PATH', 'CHANGELOG_URL', 'PROJECT_URL', 'CopilotInstallation', 'RefreshResult', 'cli_version', 'find_installations', 'refresh_token']
 
 # Cache: path → (mtime, version) - avoids re-running subprocess when the binary hasn't changed
 _version_cache: dict[Path, tuple[float, str]] = {}
@@ -93,8 +84,8 @@ _command_version_cache: dict[tuple[str, ...], str] = {}
 
 
 @dataclass
-class CodexInstallation:
-    """A discovered Codex installation."""
+class CopilotInstallation:
+    """A discovered GitHub Copilot CLI installation."""
 
     name: str
     version: str
@@ -103,7 +94,7 @@ class CodexInstallation:
 
 @dataclass
 class RefreshResult:
-    """Legacy result shape for the Codex CLI login-state probe."""
+    """Legacy result shape for the Copilot CLI login-state probe."""
 
     success: bool
     updated: bool
@@ -112,27 +103,26 @@ class RefreshResult:
     error: str
 
 
-def find_installations() -> list[CodexInstallation]:
-    """Discover Codex installations on the system.
+def find_installations() -> list[CopilotInstallation]:
+    """Discover GitHub Copilot CLI installations on the system.
 
-    Checks the native CLI path, any ``cli_command`` configured by the user
-    (e.g. a WSL install), and common IDE extension directories.  Extension
-    versions are extracted from directory names (no subprocess needed).
-    CLI versions are read via ``codex --version``.
+    Checks the native CLI path and any ``cli_command`` configured by the
+    user (e.g. a WSL install). This listing is **display only** and must
+    never take part in authentication - see ``refresh_token()``. CLI
+    versions are read via ``copilot --version``.
 
     Returns
     -------
-    list[CodexInstallation]
-        Found installations, native CLI first, then configured commands,
-        then IDE extensions.
+    list[CopilotInstallation]
+        Found installations, native CLI first, then configured commands.
     """
-    results: list[CodexInstallation] = []
+    results: list[CopilotInstallation] = []
 
     # Native CLI
-    if CODEX_CLI_PATH.is_file():
-        version = cli_version(CODEX_CLI_PATH)
+    if COPILOT_CLI_PATH.is_file():
+        version = cli_version(COPILOT_CLI_PATH)
         if version:
-            results.append(CodexInstallation('CLI', version, CODEX_CLI_PATH))
+            results.append(CopilotInstallation('CLI', version, COPILOT_CLI_PATH))
 
     # Configured commands - listed in addition to the native CLI, which stays
     # visible because it is the install this app authenticates and refreshes with
@@ -140,76 +130,39 @@ def find_installations() -> list[CodexInstallation]:
         version = _command_version(command)
         if version:
             # A custom command has no single binary path; its last argument
-            # is the closest match (e.g. the codex path behind ``wsl``).
-            results.append(CodexInstallation(name, version, Path(command[-1])))
-
-    # IDE extensions - extract version from directory name
-    for ide_name, ext_dir in _EXTENSION_DIRS:
-        try:
-            if not ext_dir.is_dir():
-                continue
-
-            best_version = ''
-            best_parts: tuple[int, ...] = ()
-            best_path = None
-            for entry in ext_dir.iterdir():
-                prefix = next((value for value in _EXTENSION_PREFIXES if entry.name.startswith(value)), None)
-                if prefix is None:
-                    continue
-                # Directory name format: openai.chatgpt-X.Y.Z-win32-x64
-                remainder = entry.name[len(prefix):]
-                match = re.match(r'(\d+\.\d+\.\d+)', remainder)
-                if match:
-                    version = match.group(1)
-                    parts = tuple(int(x) for x in version.split('.'))
-                    if parts > best_parts:
-                        best_version = version
-                        best_parts = parts
-                        best_path = entry
-        except OSError:
-            # A directory that exists but cannot be enumerated (ACL denial,
-            # broken junction, cloud placeholder) must not break the popup.
-            continue
-
-        if best_version and best_path:
-            results.append(CodexInstallation(ide_name, best_version, best_path))
+            # is the closest match (e.g. the copilot path behind ``wsl``).
+            results.append(CopilotInstallation(name, version, Path(command[-1])))
 
     return results
 
 
 def refresh_token() -> RefreshResult:
-    """Check the CLI-managed login state.
+    """Report whether the Copilot CLI is present, without probing or refreshing login state.
 
-    Codex App Server refreshes ChatGPT credentials automatically. The legacy
-    return type is retained for the existing cache interface.
+    No subcommand equivalent to ``codex login status`` is confirmed to exist
+    for the GitHub Copilot CLI - ``copilot --help`` lists a ``login``
+    subcommand but no status check, and inventing one would encode a guess
+    as fact. This function stays a thin no-op purely so the cache's
+    token-refresh path keeps the ``RefreshResult`` shape it expects;
+    ``account.getQuota`` in api.py is the actual liveness/auth probe, and its
+    error text is classified defensively (case-insensitively, for
+    'auth'/'login'/'token'/'unauthorized'/'unauthenticated') rather than on a
+    specific error code.
 
     Returns
     -------
     RefreshResult
-        Outcome of the update attempt.
+        ``success=True`` when the native binary is present; ``updated`` is
+        always ``False`` since this never changes any credential.
     """
-    if not CODEX_CLI_PATH.is_file():
+    if not COPILOT_CLI_PATH.is_file():
         return RefreshResult(success=False, updated=False, old_version='', new_version='', error='CLI not found')
 
-    try:
-        proc = _run_cli([str(CODEX_CLI_PATH), 'login', 'status'], timeout=15)
-    except subprocess.TimeoutExpired:
-        return RefreshResult(success=False, updated=False, old_version='', new_version='', error='Timeout')
-    except OSError as e:
-        return RefreshResult(success=False, updated=False, old_version='', new_version='', error=str(e))
-
-    output = (proc.stdout + proc.stderr).strip()
-    return RefreshResult(
-        success=proc.returncode == 0,
-        updated=False,
-        old_version='',
-        new_version='',
-        error='' if proc.returncode == 0 else output[:200],
-    )
+    return RefreshResult(success=True, updated=False, old_version='', new_version='', error='')
 
 
 def cli_version(path: Path) -> str:
-    """Run ``codex --version`` and return the version string, or ``''``.
+    """Run ``copilot --version`` and return the version string, or ``''``.
 
     Results are cached by file modification time so the subprocess is
     only spawned once per binary change (i.e. after an update).
@@ -250,9 +203,9 @@ def _command_version(command: list[str]) -> str:
 
 
 def _run_cli(command: list[str], timeout: int) -> subprocess.CompletedProcess[str]:
-    """Run a Codex CLI command and capture its output as UTF-8 text.
+    """Run a Copilot CLI command and capture its output as UTF-8 text.
 
-    The Codex CLI writes UTF-8 whatever the
+    The Copilot CLI is a Node application and writes UTF-8 whatever the
     Windows code page is, so the codec is pinned here instead of inherited
     from the ambient locale.  Decoding UTF-8 with a locale codec that cannot
     represent it - cp950 on a Traditional Chinese system, for example -
@@ -297,7 +250,9 @@ def _run_cli(command: list[str], timeout: int) -> subprocess.CompletedProcess[st
 def _parse_version(output: str) -> str:
     """Extract a leading ``X.Y.Z`` version from ``--version`` output.
 
-    Output format: ``"codex-cli 0.153.4"``.
+    Output format: ``"GitHub Copilot CLI 1.0.84-1.\\nRun 'copilot update' to
+    check for updates."`` - the negative lookahead stops at the digits
+    before the ``-1`` build suffix, so it still matches ``"1.0.84"``.
     """
     match = re.search(r'(?<!\d)(\d+\.\d+\.\d+)(?!\d)', output.strip())
     return match.group(1) if match else ''

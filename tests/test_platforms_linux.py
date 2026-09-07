@@ -17,7 +17,7 @@ from unittest.mock import MagicMock, patch
 if sys.platform == 'win32':
     raise unittest.SkipTest('Linux backend is not used on Windows')
 
-import usage_monitor_for_codex.platforms.linux as linux  # noqa: E402
+import usage_monitor_for_copilot.platforms.linux as linux  # noqa: E402
 
 
 class TestNoWindowKwargs(unittest.TestCase):
@@ -346,7 +346,7 @@ class TestAutostart(unittest.TestCase):
         """Enabling writes a .desktop file into the autostart directory."""
         linux.set_autostart(True)
         self.assertTrue(linux.is_autostart_enabled())
-        content = (self.directory / 'usage-monitor-for-codex.desktop').read_text(encoding='utf-8')
+        content = (self.directory / 'usage-monitor-for-copilot.desktop').read_text(encoding='utf-8')
         self.assertIn('[Desktop Entry]', content)
         self.assertIn('Type=Application', content)
         self.assertIn('X-GNOME-Autostart-enabled=true', content)
@@ -366,16 +366,16 @@ class TestAutostart(unittest.TestCase):
         """A second monitored account writes a separate entry."""
         with patch.object(linux, 'config_dir_suffix', return_value='-abc123'):
             linux.set_autostart(True)
-            self.assertTrue((self.directory / 'usage-monitor-for-codex-abc123.desktop').is_file())
+            self.assertTrue((self.directory / 'usage-monitor-for-copilot-abc123.desktop').is_file())
         self.assertFalse(linux.is_autostart_enabled())
 
     def test_non_default_config_dir_in_exec(self):
         """A custom config directory is passed through on the Exec line."""
         with patch.object(linux, 'is_default_config_dir', return_value=False), \
-             patch.object(linux, 'effective_config_dir', return_value=Path('/home/u/.codex-second')):
+             patch.object(linux, 'effective_config_dir', return_value=Path('/home/u/.copilot-second')):
             linux.set_autostart(True)
-        content = (self.directory / 'usage-monitor-for-codex.desktop').read_text(encoding='utf-8')
-        self.assertIn('--config-dir=/home/u/.codex-second', content)
+        content = (self.directory / 'usage-monitor-for-copilot.desktop').read_text(encoding='utf-8')
+        self.assertIn('--config-dir=/home/u/.copilot-second', content)
 
     def test_exec_quotes_paths_with_spaces(self):
         """A path containing spaces stays one argument."""
@@ -392,12 +392,12 @@ class TestAutostart(unittest.TestCase):
     def test_source_run_includes_module(self):
         """Running from source needs the interpreter plus the module."""
         with patch.object(linux.sys, 'executable', '/usr/bin/python3'):
-            self.assertEqual(linux._autostart_command(), '/usr/bin/python3 -m usage_monitor_for_codex')
+            self.assertEqual(linux._autostart_command(), '/usr/bin/python3 -m usage_monitor_for_copilot')
 
     def test_sync_rewrites_moved_executable(self):
         """A moved executable updates the stored Exec line."""
         linux.set_autostart(True)
-        path = self.directory / 'usage-monitor-for-codex.desktop'
+        path = self.directory / 'usage-monitor-for-copilot.desktop'
         path.write_text(_autostart_entry_with_exec('/old/path'), encoding='utf-8')
         linux.sync_autostart_path()
         self.assertIn(linux._autostart_command(), path.read_text(encoding='utf-8'))
@@ -410,7 +410,7 @@ class TestAutostart(unittest.TestCase):
     def test_sync_leaves_matching_entry_untouched(self):
         """An up-to-date entry is not rewritten."""
         linux.set_autostart(True)
-        path = self.directory / 'usage-monitor-for-codex.desktop'
+        path = self.directory / 'usage-monitor-for-copilot.desktop'
         before = path.stat().st_mtime_ns
         linux.sync_autostart_path()
         self.assertEqual(path.stat().st_mtime_ns, before)
@@ -593,7 +593,7 @@ class TestImportsWithoutPyGObject(unittest.TestCase):
     def test_backend_imports_and_degrades(self):
         """Every entry point returns its documented fallback instead of raising."""
         result = self._run_without_gi(
-            'from usage_monitor_for_codex.platforms import linux\n'
+            'from usage_monitor_for_copilot.platforms import linux\n'
             'assert linux.no_window_kwargs() == {}\n'
             "assert linux.system_time_format() in ('24h', '12h')\n"
             'assert linux.get_idle_seconds() == 0.0\n'
@@ -612,7 +612,7 @@ class TestImportsWithoutPyGObject(unittest.TestCase):
     def test_popup_host_imports(self):
         """The popup host must not reach for gi at import time either."""
         result = self._run_without_gi(
-            'from usage_monitor_for_codex.platforms import popup_linux\n'
+            'from usage_monitor_for_copilot.platforms import popup_linux\n'
             "assert popup_linux.WINDOW_KWARGS['resizable'] is True\n"
             'host = popup_linux.PopupHost(object(), 340)\n'
             'assert host._anchor() is None\n'
@@ -623,7 +623,7 @@ class TestImportsWithoutPyGObject(unittest.TestCase):
     def test_instance_guard_imports(self):
         """The single-instance guard uses fcntl, never gi."""
         result = self._run_without_gi(
-            'from usage_monitor_for_codex.platforms import instance_linux\n'
+            'from usage_monitor_for_copilot.platforms import instance_linux\n'
             "assert instance_linux._lock_path().name.endswith('.lock')\n",
         )
         self.assertEqual(result.returncode, 0, result.stderr)

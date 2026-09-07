@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from .api import fetch_prepaid_credits, fetch_profile, fetch_usage, read_access_token
-from .codex_cli import RefreshResult, refresh_token
+from .copilot_cli import RefreshResult, refresh_token
 from .settings import MAX_BACKOFF, POLL_FAST, POLL_INTERVAL
 
 __all__ = ['CacheSnapshot', 'UpdateResult', 'UsageCache']
@@ -265,12 +265,12 @@ class UsageCache:
             if data.get('rate_limited'):
                 self._apply_rate_limit_backoff(data)
 
-            # Codex App Server owns ChatGPT token refresh.  Keep retrying on
-            # the normal error cadence so a login completed in another Codex
-            # surface recovers without restarting the monitor.
+            # The Copilot CLI owns its own token refresh.  Keep retrying on
+            # the normal error cadence so a login completed elsewhere
+            # recovers without restarting the monitor.
             token_refresh = None
             if data.get('auth_error'):
-                log.warning('fetch_usage -> Codex authentication unavailable')
+                log.warning('fetch_usage -> Copilot authentication unavailable')
             elif not data.get('rate_limited'):
                 log.warning('fetch_usage -> error: %s', data['error'])
 
@@ -279,9 +279,12 @@ class UsageCache:
                 self._version += 1
             return UpdateResult(data=data, token_refresh=token_refresh)
 
-        pct_5h = (data.get('five_hour') or {}).get('utilization')
-        pct_7d = (data.get('seven_day') or {}).get('utilization')
-        log.info('fetch_usage -> OK (5h: %s%%, 7d: %s%%)', pct_5h if pct_5h is not None else '?', pct_7d if pct_7d is not None else '?')
+        # Copilot's quota fields carry no fixed set of names (unlike Claude/
+        # Codex's five_hour/seven_day) - see the field-naming contract in
+        # formatting.py - so the diagnostic log reports a count instead of
+        # naming specific fields.
+        quota_count = sum(1 for value in data.values() if isinstance(value, dict) and 'utilization' in value)
+        log.info('fetch_usage -> OK (%d quota field(s))', quota_count)
         self._record_success(data, token_before, self._fetch_prepaid_balance(data))
         return UpdateResult(data=data, token=token_before)
 
@@ -380,8 +383,8 @@ class UsageCache:
         If the credentials already hold a different token - the user
         switched accounts, or the token was refreshed out of band since
         this request began - it is retried directly, skipping the slow
-        CLI login-state probe. App Server itself remains responsible for
-        refreshing ChatGPT credentials.
+        CLI login-state probe.  The Copilot CLI itself remains responsible
+        for refreshing its own credentials.
 
         Parameters
         ----------

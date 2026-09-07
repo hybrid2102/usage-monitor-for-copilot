@@ -28,7 +28,7 @@ function init(config) {
     document.getElementById('labelPlan').textContent = translations.plan;
     document.getElementById('headingUsage').textContent = translations.usage;
     document.getElementById('headingExtraUsage').textContent = translations.extra_usage;
-    document.getElementById('headingCodexCode').textContent = translations.codex_code;
+    document.getElementById('headingCopilotCode').textContent = translations.copilot_code;
 
     const changelogLink = document.getElementById('changelogLink');
     changelogLink.textContent = translations.changelog;
@@ -98,7 +98,7 @@ function setupPinButton() {
  * Return true if a section or usage bar is hidden by the pinned compact view.
  *
  * Hiding only applies while the popup is pinned; unpinned it always shows
- * everything.  `key` is a section key (account, extra_usage, codex_code,
+ * everything.  `key` is a section key (account, extra_usage, copilot_code,
  * status) or a usage field name (e.g. one_hour_code_review).
  */
 function compactHidden(key) {
@@ -195,7 +195,7 @@ function updateData(data) {
     }
 
     const hasInstalls = !!data.installations?.length;
-    const installsVisible = hasInstalls && !compactHidden('codex_code');
+    const installsVisible = hasInstalls && !compactHidden('copilot_code');
     els.installSection.classList.toggle('visible', installsVisible);
 
     // The "Usage" heading only labels the bars against the other sections;

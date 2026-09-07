@@ -12,8 +12,8 @@ import time
 import unittest
 from unittest.mock import MagicMock, patch
 
-from usage_monitor_for_codex.cache import CacheSnapshot
-from usage_monitor_for_codex.popup import UsagePopup, _init_config, _snapshot_to_dict, _usage_entries
+from usage_monitor_for_copilot.cache import CacheSnapshot
+from usage_monitor_for_copilot.popup import UsagePopup, _init_config, _snapshot_to_dict, _usage_entries
 
 
 def _snap(
@@ -42,55 +42,57 @@ class TestUsageEntries(unittest.TestCase):
     def test_returns_entries_for_active_fields(self):
         """Returns entries only for non-null fields with utilization."""
         usage = {
-            'five_hour': {'utilization': 42, 'resets_at': '2026-01-01T00:00:00Z'},
-            'seven_day': {'utilization': 10, 'resets_at': '2026-01-07T00:00:00Z'},
-            'seven_day_sonnet': None,
+            'chat': {'utilization': 42, 'resets_at': '2026-01-01T00:00:00Z'},
+            'completions': {'utilization': 10, 'resets_at': '2026-01-07T00:00:00Z'},
+            'premium_interactions': None,
         }
         entries = _usage_entries(usage)
         self.assertEqual(len(entries), 2)
 
     def test_labels_use_popup_label(self):
         """Each entry's label is generated via popup_label."""
-        from usage_monitor_for_codex.formatting import popup_label
+        from usage_monitor_for_copilot.formatting import popup_label
 
         usage = {
-            'five_hour': {'utilization': 42, 'resets_at': '2026-01-01T00:00:00Z'},
-            'seven_day': {'utilization': 10, 'resets_at': '2026-01-07T00:00:00Z'},
+            'chat': {'utilization': 42, 'resets_at': '2026-01-01T00:00:00Z'},
+            'completions': {'utilization': 10, 'resets_at': '2026-01-07T00:00:00Z'},
         }
         entries = _usage_entries(usage)
         labels = [e[0] for e in entries]
-        self.assertEqual(labels, [popup_label('five_hour'), popup_label('seven_day')])
+        self.assertEqual(labels, [popup_label('chat'), popup_label('completions')])
 
-    def test_periods_derived_from_field_name(self):
-        """Period is derived from the field name via field_period."""
+    def test_periods_are_always_none(self):
+        """Unlike Claude/Codex's five_hour/seven_day naming, Copilot field
+        names carry no period - field_period never parses one out, so every
+        entry's period is None regardless of the field's resets_at."""
         usage = {
-            'five_hour': {'utilization': 42, 'resets_at': '2026-01-01T00:00:00Z'},
-            'seven_day': {'utilization': 10, 'resets_at': '2026-01-07T00:00:00Z'},
+            'chat': {'utilization': 42, 'resets_at': '2026-01-01T00:00:00Z'},
+            'completions': {'utilization': 10, 'resets_at': '2026-01-07T00:00:00Z'},
         }
         entries = _usage_entries(usage)
         periods = [e[2] for e in entries]
-        self.assertEqual(periods, [5 * 3600, 7 * 24 * 3600])
+        self.assertEqual(periods, [None, None])
 
     def test_data_extraction(self):
         """Entry data is pulled from the correct usage dict keys."""
-        five_hour = {'utilization': 42, 'resets_at': '2026-01-01T00:00:00Z'}
-        seven_day = {'utilization': 10, 'resets_at': '2026-01-07T00:00:00Z'}
-        usage = {'five_hour': five_hour, 'seven_day': seven_day}
+        chat = {'utilization': 42, 'resets_at': '2026-01-01T00:00:00Z'}
+        completions = {'utilization': 10, 'resets_at': '2026-01-07T00:00:00Z'}
+        usage = {'chat': chat, 'completions': completions}
 
         entries = _usage_entries(usage)
         self.assertEqual(len(entries), 2)
-        self.assertIs(entries[0][1], five_hour)
-        self.assertIs(entries[1][1], seven_day)
+        self.assertIs(entries[0][1], chat)
+        self.assertIs(entries[1][1], completions)
 
     def test_entry_includes_field_key(self):
         """Each entry's 4th element is the raw API field name."""
         usage = {
-            'five_hour': {'utilization': 42, 'resets_at': '2026-01-01T00:00:00Z'},
-            'seven_day_opus': {'utilization': 10, 'resets_at': '2026-01-07T00:00:00Z'},
+            'chat': {'utilization': 42, 'resets_at': '2026-01-01T00:00:00Z'},
+            'premium_interactions': {'utilization': 10, 'resets_at': '2026-01-07T00:00:00Z'},
         }
         entries = _usage_entries(usage)
         keys = [e[3] for e in entries]
-        self.assertEqual(keys, ['five_hour', 'seven_day_opus'])
+        self.assertEqual(keys, ['chat', 'premium_interactions'])
 
     def test_empty_usage_returns_empty(self):
         """Empty usage dict returns no entries."""
@@ -98,34 +100,34 @@ class TestUsageEntries(unittest.TestCase):
 
     def test_all_null_fields_returns_empty(self):
         """All-null fields return no entries."""
-        usage = {'five_hour': None, 'seven_day': None, 'seven_day_sonnet': None}
+        usage = {'chat': None, 'completions': None, 'premium_interactions': None}
         self.assertEqual(_usage_entries(usage), [])
 
     def test_null_utilization_skipped(self):
         """Fields with utilization None are skipped."""
         usage = {
-            'five_hour': {'utilization': None, 'resets_at': '2026-01-01T05:00:00Z'},
-            'seven_day': {'utilization': 20, 'resets_at': '2026-01-07T00:00:00Z'},
+            'chat': {'utilization': None, 'resets_at': '2026-01-01T05:00:00Z'},
+            'completions': {'utilization': 20, 'resets_at': '2026-01-07T00:00:00Z'},
         }
         entries = _usage_entries(usage)
         self.assertEqual(len(entries), 1)
         self.assertEqual(entries[0][1]['utilization'], 20)
 
-    @patch('usage_monitor_for_codex.popup.POPUP_FIELDS', ['fve_hour', 'seven_day'])
+    @patch('usage_monitor_for_copilot.popup.POPUP_FIELDS', ['chatt', 'completions'])
     def test_misspelled_popup_field_skipped(self):
         """Misspelled popup_fields entry is skipped, valid one shown."""
         usage = {
-            'five_hour': {'utilization': 42, 'resets_at': '2026-01-01T05:00:00Z'},
-            'seven_day': {'utilization': 20, 'resets_at': '2026-01-07T00:00:00Z'},
+            'chat': {'utilization': 42, 'resets_at': '2026-01-01T05:00:00Z'},
+            'completions': {'utilization': 20, 'resets_at': '2026-01-07T00:00:00Z'},
         }
         entries = _usage_entries(usage)
         self.assertEqual(len(entries), 1)
         self.assertEqual(entries[0][1]['utilization'], 20)
 
-    @patch('usage_monitor_for_codex.popup.POPUP_FIELDS', ['seven_day_sonnet'])
+    @patch('usage_monitor_for_copilot.popup.POPUP_FIELDS', ['premium_interactions'])
     def test_popup_field_pointing_to_null_skipped(self):
         """popup_fields entry pointing to a null field produces no entries."""
-        usage = {'seven_day_sonnet': None, 'five_hour': {'utilization': 42, 'resets_at': ''}}
+        usage = {'premium_interactions': None, 'chat': {'utilization': 42, 'resets_at': ''}}
         entries = _usage_entries(usage)
         self.assertEqual(entries, [])
 
@@ -133,15 +135,18 @@ class TestUsageEntries(unittest.TestCase):
         """Non-dict values (like error strings) in usage are ignored."""
         usage = {
             'error': 'server down',
-            'five_hour': {'utilization': 42, 'resets_at': '2026-01-01T05:00:00Z'},
+            'chat': {'utilization': 42, 'resets_at': '2026-01-01T05:00:00Z'},
         }
         entries = _usage_entries(usage)
         self.assertEqual(len(entries), 1)
 
-    def test_extra_usage_not_shown_as_bar(self):
-        """extra_usage is excluded from dynamic bars (different structure)."""
+    def test_differently_shaped_entry_not_shown_as_bar(self):
+        """An entry with 'utilization' but no 'resets_at' (Claude/Codex's
+        extra_usage shape) is excluded from dynamic bars - Copilot's own
+        normalized fields never have that shape, but the exclusion is
+        generic (by structure, not by key name)."""
         usage = {
-            'five_hour': {'utilization': 42, 'resets_at': '2026-01-01T05:00:00Z'},
+            'chat': {'utilization': 42, 'resets_at': '2026-01-01T05:00:00Z'},
             'extra_usage': {'is_enabled': True, 'monthly_limit': 1000, 'used_credits': 500, 'utilization': 50},
         }
         entries = _usage_entries(usage)
@@ -199,22 +204,22 @@ class TestSnapshotToDict(unittest.TestCase):
 
     def test_skips_entries_without_utilization(self):
         """Entries with None utilization are omitted."""
-        usage = {'five_hour': {'utilization': None}}
+        usage = {'chat': {'utilization': None}}
         result = _snapshot_to_dict(_snap(usage=usage), installations=[])
         self.assertEqual(result['usage'], [])
 
     def test_skips_missing_entries(self):
         """Missing usage keys produce no bar entries."""
-        usage = {'five_hour': None}
+        usage = {'chat': None}
         result = _snapshot_to_dict(_snap(usage=usage), installations=[])
         self.assertEqual(result['usage'], [])
 
-    @patch('usage_monitor_for_codex.popup.elapsed_pct', return_value=None)
-    @patch('usage_monitor_for_codex.popup.time_until', return_value='5h 0m')
-    @patch('usage_monitor_for_codex.popup.divider_positions', return_value=[])
+    @patch('usage_monitor_for_copilot.popup.elapsed_pct', return_value=None)
+    @patch('usage_monitor_for_copilot.popup.time_until', return_value='5h 0m')
+    @patch('usage_monitor_for_copilot.popup.divider_positions', return_value=[])
     def test_usage_bar_fields(self, _mock_dividers, _mock_time_until, _mock_elapsed):
         """Each usage bar dict has all required fields with correct types."""
-        usage = {'five_hour': {'utilization': 42, 'resets_at': '2026-01-01T05:00:00Z'}}
+        usage = {'chat': {'utilization': 42, 'resets_at': '2026-01-01T05:00:00Z'}}
         result = _snapshot_to_dict(_snap(usage=usage), installations=[])
 
         self.assertEqual(len(result['usage']), 1)
@@ -227,13 +232,17 @@ class TestSnapshotToDict(unittest.TestCase):
         self.assertEqual(bar['dividers'], [])
 
     def test_field_with_null_resets_at(self):
-        """An inactive scoped limit (resets_at None) renders a 0% bar with no reset text."""
-        usage = {'seven_day_fable': {'utilization': 0.0, 'resets_at': None}}
+        """A field with resets_at None renders a 0% bar with no reset text.
+
+        This is the normal case for Copilot, whose fields never carry a
+        resets_at value (unlike Claude/Codex, where it would mark an
+        inactive scoped limit)."""
+        usage = {'premium_interactions': {'utilization': 0.0, 'resets_at': None}}
         result = _snapshot_to_dict(_snap(usage=usage), installations=[])
 
         self.assertEqual(len(result['usage']), 1)
         bar = result['usage'][0]
-        self.assertEqual(bar['key'], 'seven_day_fable')
+        self.assertEqual(bar['key'], 'premium_interactions')
         self.assertEqual(bar['pct_text'], '0%')
         self.assertEqual(bar['fill_pct'], 0.0)
         self.assertEqual(bar['reset_text'], '')
@@ -241,115 +250,123 @@ class TestSnapshotToDict(unittest.TestCase):
         self.assertIsNone(bar['marker_rel'])
         self.assertFalse(bar['warn'])
 
-    @patch('usage_monitor_for_codex.popup.elapsed_pct', return_value=30.0)
-    @patch('usage_monitor_for_codex.popup.time_until', return_value='3h 30m')
-    @patch('usage_monitor_for_codex.popup.divider_positions', return_value=[0.5])
-    def test_warn_when_usage_ahead_of_time(self, _mock_dividers, _mock_time_until, _mock_elapsed):
+    # field_period is patched truthy in the next few tests: real Copilot
+    # fields never carry a period (see TestUsageEntries.test_periods_are_always_none),
+    # which would bypass elapsed_pct entirely and make these vacuous - the
+    # patch keeps this generic, still-shared time-aware code path covered.
+    @patch('usage_monitor_for_copilot.popup.field_period', return_value=18000)
+    @patch('usage_monitor_for_copilot.popup.elapsed_pct', return_value=30.0)
+    @patch('usage_monitor_for_copilot.popup.time_until', return_value='3h 30m')
+    @patch('usage_monitor_for_copilot.popup.divider_positions', return_value=[0.5])
+    def test_warn_when_usage_ahead_of_time(self, _mock_dividers, _mock_time_until, _mock_elapsed, _mock_period):
         """Bar is marked warn when utilization exceeds elapsed percentage."""
-        usage = {'five_hour': {'utilization': 60, 'resets_at': '2026-01-01T05:00:00Z'}}
+        usage = {'chat': {'utilization': 60, 'resets_at': '2026-01-01T05:00:00Z'}}
         result = _snapshot_to_dict(_snap(usage=usage), installations=[])
 
         bar = result['usage'][0]
         self.assertTrue(bar['warn'])
         self.assertAlmostEqual(bar['marker_rel'], 0.3)
 
-    @patch('usage_monitor_for_codex.popup.elapsed_pct', return_value=80.0)
-    @patch('usage_monitor_for_codex.popup.time_until', return_value='1h 0m')
-    @patch('usage_monitor_for_codex.popup.divider_positions', return_value=[])
-    def test_no_warn_when_usage_behind_time(self, _mock_dividers, _mock_time_until, _mock_elapsed):
+    @patch('usage_monitor_for_copilot.popup.field_period', return_value=18000)
+    @patch('usage_monitor_for_copilot.popup.elapsed_pct', return_value=80.0)
+    @patch('usage_monitor_for_copilot.popup.time_until', return_value='1h 0m')
+    @patch('usage_monitor_for_copilot.popup.divider_positions', return_value=[])
+    def test_no_warn_when_usage_behind_time(self, _mock_dividers, _mock_time_until, _mock_elapsed, _mock_period):
         """Bar is not warn when utilization is below elapsed percentage."""
-        usage = {'five_hour': {'utilization': 40, 'resets_at': '2026-01-01T05:00:00Z'}}
+        usage = {'chat': {'utilization': 40, 'resets_at': '2026-01-01T05:00:00Z'}}
         result = _snapshot_to_dict(_snap(usage=usage), installations=[])
 
         bar = result['usage'][0]
         self.assertFalse(bar['warn'])
 
-    @patch('usage_monitor_for_codex.popup.elapsed_pct', return_value=50.0)
-    @patch('usage_monitor_for_codex.popup.time_until', return_value='2h 30m')
-    @patch('usage_monitor_for_codex.popup.divider_positions', return_value=[])
-    def test_no_warn_when_equal(self, _mock_dividers, _mock_time_until, _mock_elapsed):
+    @patch('usage_monitor_for_copilot.popup.field_period', return_value=18000)
+    @patch('usage_monitor_for_copilot.popup.elapsed_pct', return_value=50.0)
+    @patch('usage_monitor_for_copilot.popup.time_until', return_value='2h 30m')
+    @patch('usage_monitor_for_copilot.popup.divider_positions', return_value=[])
+    def test_no_warn_when_equal(self, _mock_dividers, _mock_time_until, _mock_elapsed, _mock_period):
         """Exactly equal usage and elapsed is not a warning (strictly greater)."""
-        usage = {'five_hour': {'utilization': 50, 'resets_at': '2026-01-01T05:00:00Z'}}
+        usage = {'chat': {'utilization': 50, 'resets_at': '2026-01-01T05:00:00Z'}}
         result = _snapshot_to_dict(_snap(usage=usage), installations=[])
         self.assertFalse(result['usage'][0]['warn'])
 
-    @patch('usage_monitor_for_codex.popup.elapsed_pct', return_value=None)
-    @patch('usage_monitor_for_codex.popup.time_until', return_value='')
-    @patch('usage_monitor_for_codex.popup.divider_positions', return_value=[])
+    @patch('usage_monitor_for_copilot.popup.elapsed_pct', return_value=None)
+    @patch('usage_monitor_for_copilot.popup.time_until', return_value='')
+    @patch('usage_monitor_for_copilot.popup.divider_positions', return_value=[])
     def test_warn_at_100_without_time_period(self, _mock_dividers, _mock_time_until, _mock_elapsed):
         """Bar at 100% is warn even when no time period (time_pct is None)."""
-        usage = {'five_hour': {'utilization': 100, 'resets_at': ''}}
+        usage = {'chat': {'utilization': 100, 'resets_at': ''}}
         result = _snapshot_to_dict(_snap(usage=usage), installations=[])
         self.assertTrue(result['usage'][0]['warn'])
 
-    @patch('usage_monitor_for_codex.popup.elapsed_pct', return_value=100.0)
-    @patch('usage_monitor_for_codex.popup.time_until', return_value='')
-    @patch('usage_monitor_for_codex.popup.divider_positions', return_value=[])
-    def test_warn_at_100_when_time_also_100(self, _mock_dividers, _mock_time_until, _mock_elapsed):
+    @patch('usage_monitor_for_copilot.popup.field_period', return_value=18000)
+    @patch('usage_monitor_for_copilot.popup.elapsed_pct', return_value=100.0)
+    @patch('usage_monitor_for_copilot.popup.time_until', return_value='')
+    @patch('usage_monitor_for_copilot.popup.divider_positions', return_value=[])
+    def test_warn_at_100_when_time_also_100(self, _mock_dividers, _mock_time_until, _mock_elapsed, _mock_period):
         """Bar at 100% is warn even when elapsed time is also 100% (strict > would miss this)."""
-        usage = {'five_hour': {'utilization': 100, 'resets_at': '2026-01-01T05:00:00Z'}}
+        usage = {'chat': {'utilization': 100, 'resets_at': '2026-01-01T05:00:00Z'}}
         result = _snapshot_to_dict(_snap(usage=usage), installations=[])
         self.assertTrue(result['usage'][0]['warn'])
 
-    @patch('usage_monitor_for_codex.popup.elapsed_pct', return_value=None)
-    @patch('usage_monitor_for_codex.popup.time_until', return_value='')
-    @patch('usage_monitor_for_codex.popup.divider_positions', return_value=[])
+    @patch('usage_monitor_for_copilot.popup.elapsed_pct', return_value=None)
+    @patch('usage_monitor_for_copilot.popup.time_until', return_value='')
+    @patch('usage_monitor_for_copilot.popup.divider_positions', return_value=[])
     def test_fill_pct_clamped_to_0_1(self, _mock_dividers, _mock_time_until, _mock_elapsed):
         """Fill percentage is clamped between 0.0 and 1.0, and over-quota is always warn."""
-        usage = {'five_hour': {'utilization': 150, 'resets_at': '2026-01-01T05:00:00Z'}}
+        usage = {'chat': {'utilization': 150, 'resets_at': '2026-01-01T05:00:00Z'}}
         result = _snapshot_to_dict(_snap(usage=usage), installations=[])
         self.assertEqual(result['usage'][0]['fill_pct'], 1.0)
         self.assertTrue(result['usage'][0]['warn'])
 
-    @patch('usage_monitor_for_codex.popup.elapsed_pct', return_value=None)
-    @patch('usage_monitor_for_codex.popup.time_until', return_value='')
-    @patch('usage_monitor_for_codex.popup.divider_positions', return_value=[])
+    @patch('usage_monitor_for_copilot.popup.elapsed_pct', return_value=None)
+    @patch('usage_monitor_for_copilot.popup.time_until', return_value='')
+    @patch('usage_monitor_for_copilot.popup.divider_positions', return_value=[])
     def test_zero_utilization(self, _mock_dividers, _mock_time_until, _mock_elapsed):
         """Zero utilization produces 0% text and 0.0 fill."""
-        usage = {'five_hour': {'utilization': 0, 'resets_at': '2026-01-01T05:00:00Z'}}
+        usage = {'chat': {'utilization': 0, 'resets_at': '2026-01-01T05:00:00Z'}}
         result = _snapshot_to_dict(_snap(usage=usage), installations=[])
         # utilization 0 is falsy, so `or 0` kicks in - entry is still shown
         bar = result['usage'][0]
         self.assertEqual(bar['pct_text'], '0%')
         self.assertAlmostEqual(bar['fill_pct'], 0.0)
 
-    @patch('usage_monitor_for_codex.popup.elapsed_pct', return_value=None)
-    @patch('usage_monitor_for_codex.popup.time_until', return_value='')
-    @patch('usage_monitor_for_codex.popup.divider_positions', return_value=[])
+    @patch('usage_monitor_for_copilot.popup.elapsed_pct', return_value=None)
+    @patch('usage_monitor_for_copilot.popup.time_until', return_value='')
+    @patch('usage_monitor_for_copilot.popup.divider_positions', return_value=[])
     def test_multiple_usage_entries(self, _mock_dividers, _mock_time_until, _mock_elapsed):
         """Multiple usage types each produce a bar entry."""
         usage = {
-            'five_hour': {'utilization': 10, 'resets_at': '2026-01-01T05:00:00Z'},
-            'seven_day': {'utilization': 20, 'resets_at': '2026-01-07T00:00:00Z'},
-            'seven_day_sonnet': {'utilization': 30, 'resets_at': '2026-01-07T00:00:00Z'},
+            'chat': {'utilization': 10, 'resets_at': '2026-01-01T05:00:00Z'},
+            'completions': {'utilization': 20, 'resets_at': '2026-01-07T00:00:00Z'},
+            'premium_interactions': {'utilization': 30, 'resets_at': '2026-01-07T00:00:00Z'},
         }
         result = _snapshot_to_dict(_snap(usage=usage), installations=[])
         self.assertEqual(len(result['usage']), 3)
         pcts = [b['pct_text'] for b in result['usage']]
         self.assertEqual(pcts, ['10%', '20%', '30%'])
 
-    @patch('usage_monitor_for_codex.popup.elapsed_pct', return_value=None)
-    @patch('usage_monitor_for_codex.popup.time_until', return_value='')
-    @patch('usage_monitor_for_codex.popup.divider_positions', return_value=[])
+    @patch('usage_monitor_for_copilot.popup.elapsed_pct', return_value=None)
+    @patch('usage_monitor_for_copilot.popup.time_until', return_value='')
+    @patch('usage_monitor_for_copilot.popup.divider_positions', return_value=[])
     def test_usage_bar_includes_field_key(self, _mock_div, _mock_tu, _mock_ep):
         """Each usage bar dict carries its API field name for compact hiding."""
         usage = {
-            'five_hour': {'utilization': 10, 'resets_at': '2026-01-01T05:00:00Z'},
-            'seven_day_opus': {'utilization': 30, 'resets_at': '2026-01-07T00:00:00Z'},
+            'chat': {'utilization': 10, 'resets_at': '2026-01-01T05:00:00Z'},
+            'premium_interactions': {'utilization': 30, 'resets_at': '2026-01-07T00:00:00Z'},
         }
         result = _snapshot_to_dict(_snap(usage=usage), installations=[])
         keys = [bar['key'] for bar in result['usage']]
-        self.assertEqual(keys, ['five_hour', 'seven_day_opus'])
+        self.assertEqual(keys, ['chat', 'premium_interactions'])
 
-    @patch('usage_monitor_for_codex.popup.POPUP_FIELDS', ['typo_field', 'seven_day'])
-    @patch('usage_monitor_for_codex.popup.elapsed_pct', return_value=None)
-    @patch('usage_monitor_for_codex.popup.time_until', return_value='')
-    @patch('usage_monitor_for_codex.popup.divider_positions', return_value=[])
+    @patch('usage_monitor_for_copilot.popup.POPUP_FIELDS', ['typo_field', 'completions'])
+    @patch('usage_monitor_for_copilot.popup.elapsed_pct', return_value=None)
+    @patch('usage_monitor_for_copilot.popup.time_until', return_value='')
+    @patch('usage_monitor_for_copilot.popup.divider_positions', return_value=[])
     def test_misspelled_popup_field_skipped_in_dict(self, _mock_div, _mock_tu, _mock_ep):
         """Misspelled popup_fields entry produces no bar, valid one shown."""
         usage = {
-            'five_hour': {'utilization': 42, 'resets_at': '2026-01-01T05:00:00Z'},
-            'seven_day': {'utilization': 20, 'resets_at': '2026-01-07T00:00:00Z'},
+            'chat': {'utilization': 42, 'resets_at': '2026-01-01T05:00:00Z'},
+            'completions': {'utilization': 20, 'resets_at': '2026-01-07T00:00:00Z'},
         }
         result = _snapshot_to_dict(_snap(usage=usage), installations=[])
         self.assertEqual(len(result['usage']), 1)
@@ -357,19 +374,19 @@ class TestSnapshotToDict(unittest.TestCase):
 
     def test_all_null_fields_no_bars(self):
         """All-null quota fields produce no usage bars."""
-        usage = {'five_hour': None, 'seven_day': None, 'seven_day_sonnet': None}
+        usage = {'chat': None, 'completions': None, 'premium_interactions': None}
         result = _snapshot_to_dict(_snap(usage=usage), installations=[])
         self.assertEqual(result['usage'], [])
 
-    @patch('usage_monitor_for_codex.popup.elapsed_pct', return_value=None)
-    @patch('usage_monitor_for_codex.popup.time_until', return_value='')
-    @patch('usage_monitor_for_codex.popup.divider_positions', return_value=[])
+    @patch('usage_monitor_for_copilot.popup.elapsed_pct', return_value=None)
+    @patch('usage_monitor_for_copilot.popup.time_until', return_value='')
+    @patch('usage_monitor_for_copilot.popup.divider_positions', return_value=[])
     def test_non_dict_values_in_response_ignored(self, _mock_div, _mock_tu, _mock_ep):
         """Non-dict values in the API response are not shown as bars."""
         usage = {
             'error': 'temporary',
             'rate_limited': True,
-            'five_hour': {'utilization': 42, 'resets_at': '2026-01-01T05:00:00Z'},
+            'chat': {'utilization': 42, 'resets_at': '2026-01-01T05:00:00Z'},
         }
         result = _snapshot_to_dict(_snap(usage=usage), installations=[])
         self.assertEqual(len(result['usage']), 1)
@@ -394,7 +411,7 @@ class TestSnapshotToDict(unittest.TestCase):
         result = _snapshot_to_dict(_snap(usage=usage), installations=[])
         self.assertIsNone(result['extra'])
 
-    @patch('usage_monitor_for_codex.popup.format_credits', side_effect=lambda c, *_: f'${c / 100:.2f}')
+    @patch('usage_monitor_for_copilot.popup.format_credits', side_effect=lambda c, *_: f'${c / 100:.2f}')
     def test_extra_usage_zero_limit_shows_no_cap_variant(self, _mock_credits):
         """A zero monthly limit shows the no-cap spent text instead of hiding the section."""
         usage = {'extra_usage': {'is_enabled': True, 'monthly_limit': 0, 'used_credits': 0}}
@@ -405,7 +422,7 @@ class TestSnapshotToDict(unittest.TestCase):
         self.assertEqual(extra['pct_text'], '')
         self.assertIn('$0.00', extra['spent_text'])
 
-    @patch('usage_monitor_for_codex.popup.format_credits', side_effect=lambda c, *_: f'${c / 100:.2f}')
+    @patch('usage_monitor_for_copilot.popup.format_credits', side_effect=lambda c, *_: f'${c / 100:.2f}')
     def test_extra_usage_null_limit_shows_no_cap_variant(self, _mock_credits):
         """A null monthly_limit (uncapped pay-as-you-go credits) shows what has been spent."""
         usage = {'extra_usage': {'is_enabled': True, 'monthly_limit': None, 'used_credits': 2981}}
@@ -415,7 +432,7 @@ class TestSnapshotToDict(unittest.TestCase):
         self.assertFalse(extra['has_limit'])
         self.assertIn('$29.81', extra['spent_text'])
 
-    @patch('usage_monitor_for_codex.popup.format_credits', side_effect=lambda c, *_: f'${c / 100:.2f}')
+    @patch('usage_monitor_for_copilot.popup.format_credits', side_effect=lambda c, *_: f'${c / 100:.2f}')
     def test_extra_usage_calculation(self, _mock_credits):
         """Extra usage computes percentage and formatted text correctly."""
         usage = {'extra_usage': {'is_enabled': True, 'monthly_limit': 10000, 'used_credits': 2500}}
@@ -429,7 +446,7 @@ class TestSnapshotToDict(unittest.TestCase):
         self.assertIn('$25.00', extra['spent_text'])
         self.assertIn('$100.00', extra['spent_text'])
 
-    @patch('usage_monitor_for_codex.popup.format_credits', side_effect=lambda c, *_: f'${c / 100:.2f}')
+    @patch('usage_monitor_for_copilot.popup.format_credits', side_effect=lambda c, *_: f'${c / 100:.2f}')
     def test_extra_usage_fill_clamped(self, _mock_credits):
         """Extra usage fill is clamped to 1.0 when over limit."""
         usage = {'extra_usage': {'is_enabled': True, 'monthly_limit': 1000, 'used_credits': 2000}}
@@ -438,10 +455,10 @@ class TestSnapshotToDict(unittest.TestCase):
 
     # -- prepaid balance --
 
-    @patch('usage_monitor_for_codex.popup.format_credits', side_effect=lambda c, *_: f'${c / 100:.2f}')
+    @patch('usage_monitor_for_copilot.popup.format_credits', side_effect=lambda c, *_: f'${c / 100:.2f}')
     def test_prepaid_balance_rendered_with_limit(self, _mock_credits):
         """The balance is rendered as an extra line next to the spent text."""
-        from usage_monitor_for_codex.i18n import T
+        from usage_monitor_for_copilot.i18n import T
 
         usage = {'extra_usage': {'is_enabled': True, 'monthly_limit': 10000, 'used_credits': 2500}}
         prepaid = {'amount_minor': 5597, 'currency': 'EUR', 'decimal_places': 2}
@@ -450,10 +467,10 @@ class TestSnapshotToDict(unittest.TestCase):
 
         self.assertEqual(result['extra']['balance_text'], T['extra_usage_balance'].format(balance='$55.97'))
 
-    @patch('usage_monitor_for_codex.popup.format_credits', side_effect=lambda c, *_: f'${c / 100:.2f}')
+    @patch('usage_monitor_for_copilot.popup.format_credits', side_effect=lambda c, *_: f'${c / 100:.2f}')
     def test_prepaid_balance_rendered_without_limit(self, _mock_credits):
         """The balance is also rendered for uncapped extra usage."""
-        from usage_monitor_for_codex.i18n import T
+        from usage_monitor_for_copilot.i18n import T
 
         usage = {'extra_usage': {'is_enabled': True, 'monthly_limit': None, 'used_credits': 2981}}
         prepaid = {'amount_minor': 5597, 'currency': 'EUR', 'decimal_places': 2}
@@ -462,10 +479,10 @@ class TestSnapshotToDict(unittest.TestCase):
 
         self.assertEqual(result['extra']['balance_text'], T['extra_usage_balance'].format(balance='$55.97'))
 
-    @patch('usage_monitor_for_codex.popup.format_credits', side_effect=lambda c, *_: f'${c / 100:.2f}')
+    @patch('usage_monitor_for_copilot.popup.format_credits', side_effect=lambda c, *_: f'${c / 100:.2f}')
     def test_zero_prepaid_balance_rendered(self, _mock_credits):
         """A depleted balance is shown rather than hidden."""
-        from usage_monitor_for_codex.i18n import T
+        from usage_monitor_for_copilot.i18n import T
 
         usage = {'extra_usage': {'is_enabled': True, 'monthly_limit': 10000, 'used_credits': 2500}}
 
@@ -473,7 +490,7 @@ class TestSnapshotToDict(unittest.TestCase):
 
         self.assertEqual(result['extra']['balance_text'], T['extra_usage_balance'].format(balance='$0.00'))
 
-    @patch('usage_monitor_for_codex.popup.format_credits', side_effect=lambda c, *_: f'${c / 100:.2f}')
+    @patch('usage_monitor_for_copilot.popup.format_credits', side_effect=lambda c, *_: f'${c / 100:.2f}')
     def test_missing_prepaid_balance_renders_empty(self, _mock_credits):
         """Without a balance the extra section keeps exactly its previous content."""
         usage = {'extra_usage': {'is_enabled': True, 'monthly_limit': 10000, 'used_credits': 2500}}
@@ -499,7 +516,7 @@ class TestSnapshotToDict(unittest.TestCase):
         result = _snapshot_to_dict(_snap(), installations=installs)
         self.assertEqual(result['installations'], installs)
 
-    @patch('usage_monitor_for_codex.popup.find_installations')
+    @patch('usage_monitor_for_copilot.popup.find_installations')
     def test_installations_auto_detected(self, mock_find):
         """When installations is None, find_installations() is called."""
         inst = MagicMock()
@@ -527,30 +544,30 @@ class TestSnapshotToDict(unittest.TestCase):
 
     def test_status_refreshing_when_no_usage_no_error(self):
         """Shows refreshing status when no usage data and no error."""
-        from usage_monitor_for_codex.i18n import T
+        from usage_monitor_for_copilot.i18n import T
 
         result = _snapshot_to_dict(_snap(usage={}, last_error=None), installations=[])
         self.assertEqual(result['status']['text'], T['status_refreshing'])
         self.assertFalse(result['status']['is_error'])
 
-    @patch('usage_monitor_for_codex.popup.elapsed_pct', return_value=None)
-    @patch('usage_monitor_for_codex.popup.time_until', return_value='')
-    @patch('usage_monitor_for_codex.popup.divider_positions', return_value=[])
+    @patch('usage_monitor_for_copilot.popup.elapsed_pct', return_value=None)
+    @patch('usage_monitor_for_copilot.popup.time_until', return_value='')
+    @patch('usage_monitor_for_copilot.popup.divider_positions', return_value=[])
     def test_status_live_mode_keys(self, _mock_div, _mock_tu, _mock_ep):
         """Live mode status contains all required keys for the JS timer."""
-        usage = {'five_hour': {'utilization': 50, 'resets_at': '2026-01-01T05:00:00Z'}}
+        usage = {'chat': {'utilization': 50, 'resets_at': '2026-01-01T05:00:00Z'}}
         result = _snapshot_to_dict(
             _snap(usage=usage, last_success_time=1000.0, refreshing=True, last_error='Server down'),
             installations=[], next_poll_time=1180.0,
         )
         self.assertEqual(set(result['status'].keys()), {'last_success_time', 'next_poll_time', 'refreshing', 'error'})
 
-    @patch('usage_monitor_for_codex.popup.elapsed_pct', return_value=None)
-    @patch('usage_monitor_for_codex.popup.time_until', return_value='')
-    @patch('usage_monitor_for_codex.popup.divider_positions', return_value=[])
+    @patch('usage_monitor_for_copilot.popup.elapsed_pct', return_value=None)
+    @patch('usage_monitor_for_copilot.popup.time_until', return_value='')
+    @patch('usage_monitor_for_copilot.popup.divider_positions', return_value=[])
     def test_status_error_truncated_in_live_mode(self, _mock_div, _mock_tu, _mock_ep):
         """Error messages are truncated to 120 characters in live mode."""
-        usage = {'five_hour': {'utilization': 50, 'resets_at': '2026-01-01T05:00:00Z'}}
+        usage = {'chat': {'utilization': 50, 'resets_at': '2026-01-01T05:00:00Z'}}
         long_error = 'x' * 200
         result = _snapshot_to_dict(
             _snap(usage=usage, last_error=long_error),
@@ -578,15 +595,15 @@ class TestInitConfig(unittest.TestCase):
         config = _init_config(_snap())
         self.assertEqual(set(config.keys()), {'colors', 't', 'app_version', 'compact_hide', 'data'})
 
-    @patch('usage_monitor_for_codex.popup.COMPACT_HIDE', ['account', 'seven_day_opus'])
+    @patch('usage_monitor_for_copilot.popup.COMPACT_HIDE', ['account', 'premium_interactions'])
     def test_compact_hide_from_settings(self):
         """compact_hide is taken from the COMPACT_HIDE setting."""
         config = _init_config(_snap())
-        self.assertEqual(config['compact_hide'], ['account', 'seven_day_opus'])
+        self.assertEqual(config['compact_hide'], ['account', 'premium_interactions'])
 
     def test_colors_from_settings(self):
         """Color values come from settings module constants."""
-        from usage_monitor_for_codex.settings import BAR_BG, BAR_DIVIDER, BAR_FG, BAR_FG_WARN, BAR_MARKER, BG, FG, FG_DIM, FG_HEADING, FG_LINK
+        from usage_monitor_for_copilot.settings import BAR_BG, BAR_DIVIDER, BAR_FG, BAR_FG_WARN, BAR_MARKER, BG, FG, FG_DIM, FG_HEADING, FG_LINK
 
         config = _init_config(_snap())
         colors = config['colors']
@@ -603,7 +620,7 @@ class TestInitConfig(unittest.TestCase):
 
     def test_translations_from_i18n(self):
         """Translation values come from the T dict."""
-        from usage_monitor_for_codex.i18n import T
+        from usage_monitor_for_copilot.i18n import T
 
         config = _init_config(_snap())
         t = config['t']
@@ -613,7 +630,7 @@ class TestInitConfig(unittest.TestCase):
         self.assertEqual(t['plan'], T['plan'])
         self.assertEqual(t['usage'], T['usage'])
         self.assertEqual(t['extra_usage'], T['extra_usage'])
-        self.assertEqual(t['codex_code'], T['codex_code'])
+        self.assertEqual(t['copilot_code'], T['copilot_code'])
         self.assertEqual(t['changelog'], T['changelog'])
         self.assertEqual(t['pin_popup'], T['pin_popup'])
         self.assertEqual(t['unpin_popup'], T['unpin_popup'])
@@ -627,7 +644,7 @@ class TestInitConfig(unittest.TestCase):
 
     def test_app_version(self):
         """app_version matches the package version."""
-        from usage_monitor_for_codex import __version__
+        from usage_monitor_for_copilot import __version__
 
         config = _init_config(_snap())
         self.assertEqual(config['app_version'], __version__)
@@ -660,8 +677,8 @@ class TestReportHeight(unittest.TestCase):
         webview.create_window.
         """
         patcher_watch = patch.object(UsagePopup, '_dismiss_watch', lambda self: None)
-        patcher_webview = patch('usage_monitor_for_codex.popup.webview')
-        patcher_host = patch('usage_monitor_for_codex.popup.PopupHost')
+        patcher_webview = patch('usage_monitor_for_copilot.popup.webview')
+        patcher_host = patch('usage_monitor_for_copilot.popup.PopupHost')
         patcher_watch.start()
         mock_webview = patcher_webview.start()
         patcher_host.start()
@@ -947,9 +964,9 @@ class TestUpdateLoopResilience(unittest.TestCase):
             if iterations[0] > 10:
                 popup._running = False
 
-        with patch('usage_monitor_for_codex.popup.time.sleep', side_effect=guarded_sleep), \
-             patch('usage_monitor_for_codex.popup.find_installations', return_value=[]), \
-             patch('usage_monitor_for_codex.popup._snapshot_to_dict', return_value={}):
+        with patch('usage_monitor_for_copilot.popup.time.sleep', side_effect=guarded_sleep), \
+             patch('usage_monitor_for_copilot.popup.find_installations', return_value=[]), \
+             patch('usage_monitor_for_copilot.popup._snapshot_to_dict', return_value={}):
             popup._update_loop()
 
         self.assertEqual(popup._window.evaluate_js.call_count, 2)
@@ -982,9 +999,9 @@ class TestUpdateLoopResilience(unittest.TestCase):
             if iterations[0] > 10:
                 popup._running = False
 
-        with patch('usage_monitor_for_codex.popup.time.sleep', side_effect=guarded_sleep), \
-             patch('usage_monitor_for_codex.popup.find_installations', return_value=[]), \
-             patch('usage_monitor_for_codex.popup._snapshot_to_dict', return_value={}):
+        with patch('usage_monitor_for_copilot.popup.time.sleep', side_effect=guarded_sleep), \
+             patch('usage_monitor_for_copilot.popup.find_installations', return_value=[]), \
+             patch('usage_monitor_for_copilot.popup._snapshot_to_dict', return_value={}):
             popup._update_loop()
 
         self.assertEqual(popup._window.evaluate_js.call_count, 2)

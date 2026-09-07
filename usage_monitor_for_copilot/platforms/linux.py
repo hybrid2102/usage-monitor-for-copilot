@@ -4,7 +4,7 @@ Linux Backend
 
 Linux implementations of the platform API, targeting a freedesktop session
 (GNOME, KDE, wlroots compositors).  Imported on every non-Windows system;
-see :mod:`usage_monitor_for_codex.platforms` for the dispatch.
+see :mod:`usage_monitor_for_copilot.platforms` for the dispatch.
 
 ``gi`` is imported lazily inside the functions that need it, so this module
 stays importable in a plain virtual environment - the test suite depends on
@@ -43,8 +43,8 @@ DIAGNOSTIC_PACKAGES = ('pywebview', 'PyGObject', 'pystray', 'Pillow')
 
 # XDG autostart: a .desktop file here is launched when the session starts.
 AUTOSTART_DIRECTORY = Path.home() / '.config' / 'autostart'
-AUTOSTART_BASE_NAME = 'usage-monitor-for-codex'
-APPLICATION_NAME = 'Usage Monitor for Codex'
+AUTOSTART_BASE_NAME = 'usage-monitor-for-copilot'
+APPLICATION_NAME = 'Usage Monitor for Copilot'
 
 # Session-bus endpoints. GNOME's Mutter reports idle time even on Wayland,
 # where no X11 equivalent of GetLastInputInfo exists.
@@ -398,7 +398,7 @@ def _autostart_command() -> str:
     if getattr(sys, 'frozen', False):
         command = shlex.quote(sys.executable)
     else:
-        command = f'{shlex.quote(sys.executable)} -m usage_monitor_for_codex'
+        command = f'{shlex.quote(sys.executable)} -m usage_monitor_for_copilot'
 
     if not is_default_config_dir():
         command += f' --config-dir={shlex.quote(str(effective_config_dir()))}'
@@ -410,7 +410,7 @@ def _autostart_entry() -> str:
     """Return the full .desktop file contents for this instance.
 
     A source checkout needs ``Path``: the session starts applications from the
-    home directory, and ``-m usage_monitor_for_codex`` only resolves with the
+    home directory, and ``-m usage_monitor_for_copilot`` only resolves with the
     project root as the working directory.
     """
     lines = [

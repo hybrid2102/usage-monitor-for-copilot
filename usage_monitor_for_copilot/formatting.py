@@ -16,17 +16,12 @@ from .settings import CURRENCY_SYMBOL, TIME_FORMAT, TOOLTIP_FIELDS, _SYSTEM_CURR
 
 __all__ = [
     'divider_positions', 'elapsed_pct', 'expand_popup_fields', 'field_period', 'format_credits',
-    'format_tooltip', 'parse_field_name', 'popup_label', 'time_until', 'tooltip_label',
+    'format_tooltip', 'popup_label', 'time_until', 'tooltip_label',
 ]
 
 PERIOD_5H = 5 * 3600
 PERIOD_7D = 7 * 24 * 3600
 
-_NUMBER_WORDS = {
-    'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5, 'six': 6,
-    'seven': 7, 'eight': 8, 'nine': 9, 'ten': 10, 'eleven': 11, 'twelve': 12,
-}
-_UNIT_SUFFIXES = {'hour': 'h', 'day': 'd'}
 _TITLE_CASE_EXCEPTIONS = {'oauth': 'OAuth', 'api': 'API', 'ai': 'AI'}
 _CURRENCY_SYMBOLS = {
     'USD': '$', 'EUR': '€', 'GBP': '£', 'JPY': '¥', 'CNY': '¥',
@@ -34,38 +29,20 @@ _CURRENCY_SYMBOLS = {
 }
 
 
-def parse_field_name(field: str) -> tuple[int, str, str | None] | None:
-    """Parse an API field name into its numeric, unit, and variant components.
+def _humanize_field(field: str) -> str:
+    """Humanize an API field name into a display label, respecting abbreviation exceptions.
+
+    Unlike Claude/Codex, Copilot's quota field names (the raw ``quotaSnapshots``
+    keys, e.g. ``'premium_interactions'``) carry no period prefix to parse -
+    they are humanized generically instead, which stays future-proof for any
+    field GitHub adds later.
 
     Parameters
     ----------
     field : str
-        API field name, e.g. ``'five_hour'``, ``'one_hour_code_review'``.
-
-    Returns
-    -------
-    tuple or None
-        ``(number, unit, variant)`` where *number* is the parsed digit,
-        *unit* is the raw unit word (e.g. ``'hour'``, ``'day'``), and
-        *variant* is the remaining suffix or ``None``.
-        Returns ``None`` if the number word or unit is not recognized.
+        API field name, e.g. ``'premium_interactions'``.
     """
-    parts = field.split('_', 2)
-    if len(parts) < 2:
-        return None
-
-    number = _NUMBER_WORDS.get(parts[0])
-    unit = parts[1]
-    if number is None or unit not in _UNIT_SUFFIXES:
-        return None
-
-    variant = parts[2] if len(parts) > 2 else None
-    return (number, unit, variant)
-
-
-def _title_case_variant(text: str) -> str:
-    """Title-case a variant string, respecting abbreviation exceptions."""
-    return ' '.join(_TITLE_CASE_EXCEPTIONS.get(w.lower(), w.title()) for w in text.split('_'))
+    return ' '.join(_TITLE_CASE_EXCEPTIONS.get(w.lower(), w.title()) for w in field.split('_'))
 
 
 def tooltip_label(field: str) -> str:
@@ -74,85 +51,58 @@ def tooltip_label(field: str) -> str:
     Parameters
     ----------
     field : str
-        API field name, e.g. ``'five_hour'``, ``'one_hour_code_review'``.
+        API field name, e.g. ``'premium_interactions'``, ``'chat'``.
 
     Returns
     -------
     str
-        Short label like ``'5h'``, ``'7d'``, or ``'7d Sonnet'``.
-        Falls back to title case of the full field name if unparseable.
+        Humanized label, e.g. ``'Premium Interactions'``.
     """
-    parsed = parse_field_name(field)
-    if parsed is None:
-        return _title_case_variant(field)
-
-    number, unit, variant = parsed
-    label = f'{number}{_UNIT_SUFFIXES[unit]}'
-    if variant:
-        label += f' {_title_case_variant(variant)}'
-    return label
+    return _humanize_field(field)
 
 
 def popup_label(field: str) -> str:
-    """Generate a popup bar label from an API field name using i18n templates.
+    """Generate a popup bar label from an API field name using the ``quota_label`` i18n template.
 
     Parameters
     ----------
     field : str
-        API field name, e.g. ``'five_hour'``, ``'one_hour_code_review'``.
+        API field name, e.g. ``'premium_interactions'``, ``'chat'``.
 
     Returns
     -------
     str
-        Localized label like ``'Session (5hr)'`` or ``'Weekly (Sonnet)'``.
-        Falls back to title case with abbreviation exceptions if unparseable.
+        Localized label like ``'Premium Interactions (Monthly)'``.
     """
-    parsed = parse_field_name(field)
-    if parsed is None:
-        return _title_case_variant(field)
-
-    number, unit, variant = parsed
-    if variant:
-        suffix = _title_case_variant(variant)
-    elif unit == 'hour':
-        suffix = f'{number}hr'
-    else:
-        suffix = f'{number} {unit}'
-
-    template_key = 'session_label' if unit == 'hour' else 'weekly_label'
-    return T[template_key].format(suffix=suffix)
+    return T['quota_label'].format(name=_humanize_field(field))
 
 
 def field_period(field: str) -> int | None:
-    """Return the period duration in seconds for a field, or None if unknown.
+    """Return the period duration in seconds for a field, or None.
+
+    Unlike Claude/Codex's ``five_hour``/``seven_day`` convention, Copilot's
+    field names (the raw ``quotaSnapshots`` keys) never encode a period -
+    GitHub's quotas reset monthly and the API gives no parseable duration -
+    so this always returns None.  Kept as a function, rather than removed
+    outright, because callers (app.py, popup.py) invoke it generically to
+    decide whether a time-elapsed marker can be drawn on a field's usage bar.
 
     Parameters
     ----------
     field : str
-        API field name, e.g. ``'five_hour'``, ``'one_hour_code_review'``.
+        API field name, e.g. ``'premium_interactions'``.
     """
-    parsed = parse_field_name(field)
-    if parsed is None:
-        return None
-
-    number, unit, _ = parsed
-    if unit == 'hour':
-        return number * 3600
-    if unit == 'day':
-        return number * 24 * 3600
     return None
 
 
-def _field_sort_key(field: str) -> tuple[int, int, int, str]:
-    """Sort key for default field ordering: shorter periods first, base before variants."""
-    parsed = parse_field_name(field)
-    if parsed is None:
-        return (2, 0, 0, field)
+def _field_sort_key(field: str) -> str:
+    """Sort key for default field ordering.
 
-    number, unit, variant = parsed
-    unit_order = 0 if unit == 'hour' else 1
-    variant_order = 0 if variant is None else 1
-    return (unit_order, number, variant_order, variant or '')
+    Copilot field names carry no period to order by (unlike Claude/Codex's
+    ``five_hour``/``seven_day`` convention), so the default wildcard
+    expansion order is simply alphabetical.
+    """
+    return field
 
 
 def expand_popup_fields(popup_fields: list[str], usage_data: dict[str, Any]) -> list[str]:

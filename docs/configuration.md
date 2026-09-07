@@ -12,73 +12,68 @@ All settings work out of the box - no configuration file is needed. To customize
 
 The app searches for this file in these locations (first match wins):
 
-1. **`$CODEX_HOME/usage-monitor-settings.json`** (only if a custom config directory is set via `--config-dir` or `CODEX_HOME` and differs from `~/.codex/`) - so each instance can have its own settings
+1. **`$COPILOT_HOME/usage-monitor-settings.json`** (only if a custom config directory is set via `--config-dir` or `COPILOT_HOME` and differs from `~/.copilot/`) - so each instance can have its own settings
 2. **Next to the EXE** (or project root when running from source)
-3. **`~/.codex/usage-monitor-settings.json`**
+3. **`~/.copilot/usage-monitor-settings.json`**
 
 The app never creates or modifies this file. Settings are read at startup - after editing the file, use the **Restart** option in the tray context menu to apply changes.
 
 ## Alert thresholds
 
-Configure usage percentage thresholds that trigger desktop notifications. Session and weekly quotas have separate thresholds since their time horizons differ significantly. Set to an empty array `[]` to disable alerts for a specific quota type.
+Configure usage percentage thresholds that trigger desktop notifications. Set to an empty array `[]` to disable alerts for a specific quota field.
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `alert_thresholds_five_hour` | `[50, 80, 95]` | Thresholds (%) for Session (5hr) |
-| `alert_thresholds_seven_day` | `[95]` | Thresholds (%) for Weekly quotas (7 day and all variants) |
-| `alert_thresholds_extra_usage` | `[50, 80, 95]` | Thresholds (%) for Extra Usage (paid overage) |
-| `alert_extra_usage_spent` | `[]` | Absolute Extra Usage spending amounts (in your billing currency, e.g. `[50, 100, 150]` for dollars) that trigger a notification - the only alert that works when extra usage has no monthly limit |
-| `alert_time_aware` | `true` | Only alert when usage outpaces elapsed time |
-| `alert_time_aware_below` | `90` | Time-aware check applies only to thresholds below this value; thresholds at or above always fire |
+| `alert_thresholds_premium_interactions` | `[50, 80, 95]` | Thresholds (%) for the `premium_interactions` quota |
 
-Threshold lookup uses a fallback chain: exact match (for example an additional named App Server bucket), then its base period, then no alerts. This lets you configure stricter thresholds per bucket when needed:
+Threshold lookup uses a fallback chain: exact match on the field name, then no alerts. Unlike the Claude and Codex monitors, Copilot's quota field names (`chat`, `completions`, `premium_interactions`, ...) carry no period suffix to fall back to, so there is no further fallback step. Configure a threshold for any other field the same way, by name:
 
 ```json
 {
-    "alert_thresholds_one_hour_code_review": [50, 80, 95]
+    "alert_thresholds_chat": [80, 95]
 }
 ```
 
-## Codex CLI command
+## Copilot CLI command
 
-The popup lists the Codex version of the natively installed CLI and of each IDE extension it finds. Installs it cannot see - most commonly a Codex running inside WSL - are missing from that list. Use `cli_command` to have their versions reported as well.
+The popup lists the Copilot version of the natively installed CLI. Installs it cannot see - most commonly a Copilot CLI running inside WSL - are missing from that list. Use `cli_command` to have their versions reported as well.
 
-The value is an object mapping a display name to the base command as an array of arguments (the app appends `--version` itself). Each entry is listed in the popup under the name you give it, **in addition to** the native CLI and the IDE extensions.
+The value is an object mapping a display name to the base command as an array of arguments (the app appends `--version` itself). Each entry is listed in the popup under the name you give it, **in addition to** the native CLI.
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `cli_command` | *(none)* | Object mapping a display name to a base command (array of strings) whose Codex version is reported alongside the auto-detected ones, e.g. a WSL install |
+| `cli_command` | *(none)* | Object mapping a display name to a base command (array of strings) whose Copilot version is reported alongside the auto-detected native CLI, e.g. a WSL install |
 
 ```json
 {
     "cli_command": {
-        "WSL": ["wsl", "/home/<user>/.local/bin/codex"]
+        "WSL": ["wsl", "/home/<user>/.local/bin/copilot"]
     }
 }
 ```
 
-An entry only appears once its command reports a version, so if it stays missing, run the command yourself in a terminal - `wsl /home/<user>/.local/bin/codex --version` has to print a version number.
+An entry only appears once its command reports a version, so if it stays missing, run the command yourself in a terminal - `wsl /home/<user>/.local/bin/copilot --version` has to print a version number (e.g. `GitHub Copilot CLI 1.0.84-1.`).
 
-- **This setting is display only.** Authentication always stays in the natively installed CLI's App Server; the monitor never reads its credentials.
-- **The version is read once per app start.** After updating Codex inside WSL, restart the app to see the new version.
+- **This setting is display only.** Authentication always stays in the natively installed CLI; the monitor never reads its credentials.
+- **The version is read once per app start.** After updating Copilot inside WSL, restart the app to see the new version.
 
 ## Tooltip fields
 
-The tray tooltip shows a quick usage summary when you hover over the icon. By default, it displays the session (5h) and weekly (7d) quotas. Use `tooltip_fields` to choose which usage fields appear in the tooltip.
+The tray tooltip shows a quick usage summary when you hover over the icon. By default, it displays the `premium_interactions` quota - the one quota type that is consistently metered across plan tiers (`chat` and `completions` are frequently unlimited on paid plans). Use `tooltip_fields` to choose which usage fields appear in the tooltip.
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `tooltip_fields` | `["five_hour", "seven_day"]` | Which usage fields to show in the tray tooltip, in order |
+| `tooltip_fields` | `["premium_interactions"]` | Which usage fields to show in the tray tooltip, in order |
 
-Must be an array of non-empty strings. Duplicates are silently removed. An empty array `[]` is valid (tooltip shows only the title, no usage fields). Unknown field names are accepted - if a field is `null` or missing from the API response, it is simply skipped.
+Must be an array of non-empty strings. Duplicates are silently removed. An empty array `[]` is valid (tooltip shows only the title, no usage fields). Unknown field names are accepted - if a field is missing from the API response (or not part of the current plan), it is simply skipped.
 
-**Common field names:** `five_hour`, `seven_day`. Additional named buckets exposed by App Server receive normalized names such as `one_hour_code_review`.
+**Common field names:** `chat`, `completions`, `premium_interactions`, plus any additional quota key GitHub adds to the API later.
 
-**Example** - show the two standard windows in the tooltip:
+**Example** - show chat and premium interactions in the tooltip:
 
 ```json
 {
-    "tooltip_fields": ["five_hour", "seven_day"]
+    "tooltip_fields": ["chat", "premium_interactions"]
 }
 ```
 
@@ -88,26 +83,26 @@ The popup shows usage bars for all active quota types by default. Use `popup_fie
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `popup_fields` | `["*"]` | Which usage fields to show in the popup, in order. `"*"` is a wildcard meaning "all remaining non-null fields in default order" |
+| `popup_fields` | `["*"]` | Which usage fields to show in the popup, in order. `"*"` is a wildcard meaning "all remaining non-null fields, in the order the API reports them" |
 
-Must be an array of non-empty strings. `"*"` may appear at most once. Duplicates are silently removed. Unknown field names are accepted - if a field is `null` or missing from the API response, it is simply skipped.
+Must be an array of non-empty strings. `"*"` may appear at most once. Duplicates are silently removed. Unknown field names are accepted - if a field is missing from the API response, it is simply skipped.
 
-**Common field names:** `five_hour`, `seven_day`. Additional named buckets exposed by App Server are included automatically by `"*"`.
+**Common field names:** `chat`, `completions`, `premium_interactions`. Additional quota keys GitHub adds later are included automatically by `"*"`.
 
-**Default order** (used for `"*"` and when no setting is present): shorter periods first (`hour` before `day`), base field before variants, variants alphabetically.
+**Default order** (used for `"*"` and when no setting is present): the order the API reports in `quotaSnapshots`. Unlike the Claude and Codex monitors' field names, Copilot's carry no encoded time period (`five_hour`, `seven_day`) to sort by - each bar's label is instead humanized generically from the field name, e.g. `premium_interactions` renders as "Premium Interactions (Monthly)".
 
 **Examples:**
 
 | Setting | Result |
 |---------|--------|
-| *(not set)* | All non-null fields in default order |
-| `["seven_day", "*"]` | Weekly first, then all remaining fields |
-| `["five_hour", "seven_day"]` | Only these two, everything else hidden |
+| *(not set)* | All non-null fields in the order the API reports |
+| `["premium_interactions", "*"]` | Premium Interactions first, then all remaining fields |
+| `["chat", "premium_interactions"]` | Only these two, everything else hidden |
 | `["*"]` | Same as not set |
 
 ```json
 {
-    "popup_fields": ["seven_day", "*"]
+    "popup_fields": ["premium_interactions", "*"]
 }
 ```
 
@@ -123,65 +118,39 @@ Must be an array of non-empty strings. Duplicates are silently removed. Unknown 
 
 Entries can be either a **section key** or a **usage field name**:
 
-**Section keys:** `account` (email and plan), `extra_usage` (paid overage bar and prepaid credit balance), `codex_code` (installed versions), `status` (the footer with the update time). The usage bar section itself cannot be hidden as a whole - hide individual bars by their field name instead. When nothing but the usage bars is left, the "Usage" heading is dropped automatically.
+**Section keys:** `copilot_code` (installed CLI version), `status` (the footer with the update time). The usage bar section itself cannot be hidden as a whole - hide individual bars by their field name instead. When nothing but the usage bars is left, the "Usage" heading is dropped automatically.
 
-**Usage field names:** any normalized quota field, for example `five_hour`, `seven_day`, or `one_hour_code_review`. This hides that single bar in the pinned view, independent of [`popup_fields`](#popup-fields) (which controls the normal, unpinned popup).
+**Usage field names:** any quota field returned by the API, for example `chat`, `completions`, or `premium_interactions`. This hides that single bar in the pinned view, independent of [`popup_fields`](#popup-fields) (which controls the normal, unpinned popup).
 
-**Example** - pin to a minimal view with only the session and weekly bars:
+**Example** - pin to a minimal view with only the premium-interactions bar:
 
 ```json
 {
-    "compact_hide": ["account", "extra_usage", "codex_code", "status", "one_hour_code_review"]
+    "compact_hide": ["copilot_code", "status", "chat", "completions"]
 }
 ```
 
 ## Tray icon bars
 
-The tray icon displays two small progress bars. By default, these show the session (5h) and weekly (7d) quotas. Use `icon_fields` to choose which two API fields are displayed, and `icon_style` to switch the icon layout.
+The tray icon displays a small progress bar for each field listed in `icon_fields`. By default, this shows only `premium_interactions` - it is the one quota type that is consistently metered/scarce across plan tiers, since `chat` and `completions` are frequently unlimited (`isUnlimitedEntitlement`) on paid plans, so defaulting the icon to either of them would often show a permanently-empty or moot bar. Use `icon_fields` to choose which field(s) are displayed, and `icon_style` to switch the icon layout.
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `icon_fields` | `["five_hour", "seven_day"]` | Which two usage fields to show as icon bars. The first entry is the top bar (also determines the icon text), the second is the bottom bar |
-| `icon_style` | `"number+bars"` | Icon layout: `"number+bars"` shows the first field's percentage above two progress bars; `"numbers"` shows both fields as two stacked percentages without bars |
+| `icon_fields` | `["premium_interactions"]` | Which usage field(s) to show as icon bars. The first entry determines the icon text; a second entry adds a bottom bar |
+| `icon_style` | `"number+bars"` | Icon layout: `"number+bars"` shows the first field's percentage above its progress bar(s); `"numbers"` shows each field as a stacked percentage without bars |
 
-Must be an array of exactly 2 non-empty strings. Unknown field names are accepted - if a field is `null` or missing from the API response, the bar shows 0%.
+Must be an array of non-empty strings. Unknown field names are accepted - if a field is missing from the API response (or not part of the current plan), its bar shows 0%.
 
-**Common field names:** `five_hour`, `seven_day`, plus any normalized named buckets returned by App Server.
+**Common field names:** `chat`, `completions`, `premium_interactions`, plus any additional quota key GitHub adds to the API later.
 
-Each entry can optionally include a display mode suffix using colon syntax: `"field_name:mode"`.
+Unlike the Claude and Codex monitors, Copilot's quota fields carry no reset timestamp the app can trust (see [API Reference](api-reference.md#resetdate-is-not-a-reliable-reset-time)), so the icon bars show no elapsed-time marker and never switch to the warning color for being "ahead of pace" - only an exhausted quota (100%) is called out.
 
-**Available bar display modes:**
-
-| Mode | Description |
-|------|-------------|
-| `utilization` | *(default)* Fills left-to-right proportional to current usage |
-| `overage` | Shows how far usage has entered the over-budget zone: empty when usage is at or below the time marker (on pace or ahead), half-filled when usage is halfway between the time marker and 100%, full when usage reaches 100% |
-
-In `utilization` mode, each bar also shows a thin vertical marker at the elapsed-time position of the quota period - the same information as the time marker in the detail popup. When usage is ahead of the elapsed time (or fully exhausted), the bar fill switches to the warning color (`fg_warn` in [Tray icon colors](#tray-icon-colors)), matching the popup's red warning fill.
-
-**The `"numbers"` style** replaces the bars with a second percentage: the first `icon_fields` entry becomes the top row, the second the bottom row. Each row follows the same rules as the classic icon text - an exhausted quota shows `✕` (or `$` when paid extra usage is still available), and when both are exhausted the icon collapses to a single full-size `✕`/`$`. The time marker, the warning color, and the `:overage` suffix have no effect in this style; while both quotas are at 0% the icon shows the idle terminal prompt `>`.
-
-**Example** - show session and weekly usage as two stacked percentages:
+**Example** - show premium interactions and chat as two stacked percentages:
 
 ```json
 {
+    "icon_fields": ["premium_interactions", "chat"],
     "icon_style": "numbers"
-}
-```
-
-**Example** - show session in overage mode and weekly in default mode:
-
-```json
-{
-    "icon_fields": ["five_hour:overage", "seven_day"]
-}
-```
-
-**Example** - show session and an optional code-review bucket:
-
-```json
-{
-    "icon_fields": ["five_hour", "one_hour_code_review"]
 }
 ```
 
@@ -206,7 +175,7 @@ Run a shell command when a usage event occurs. See [Event Commands](event-comman
 | `poll_error` | `30` | Seconds after a transient error (5xx, network). Rate-limit errors (429) use exponential backoff instead |
 | `max_backoff` | `900` | Maximum backoff in seconds for rate-limit errors (15 min) |
 | `idle_pause` | `300` | Seconds of inactivity before polling slows down to `idle_interval` (0 = disable). A locked workstation slows down immediately. An open detail popup keeps the normal cadence unless the lock screen or a screensaver covers it |
-| `idle_interval` | `900` | Seconds between API updates while nobody is at the machine (15 min). Quota resets and account switches are still picked up as they happen |
+| `idle_interval` | `900` | Seconds between API updates while nobody is at the machine (15 min). Quota resets are still picked up as they happen |
 
 ## Language
 
@@ -221,14 +190,6 @@ By default, reset times follow your system's clock format (the 24-hour or 12-hou
 | Key | Default | Description |
 |-----|---------|-------------|
 | `time_format` | *(auto-detected from your system)* | Clock format for reset times: `"24h"` (e.g. `14:30`) or `"12h"` (e.g. `2:30 PM`) |
-
-## Currency
-
-When App Server provides a monetary credits balance, the app formats it using the supplied currency metadata and falls back to the system locale. An override set here always wins. Number formatting follows the system locale.
-
-| Key | Default | Description |
-|-----|---------|-------------|
-| `currency_symbol` | *(from API, else locale)* | Override the displayed currency symbol (e.g., `"$"`, `"€"`, `"¥"`) |
 
 ## Tray icon colors
 
@@ -250,6 +211,8 @@ Override individual channels as RGBA arrays `[R, G, B, A]` (0-255). Unspecified 
 | `fg_link` | `"#4a9eff"` | Link text (e.g. changelog) |
 | `bar_bg` | `"#333333"` | Progress bar background |
 | `bar_fg` | `"#4a9eff"` | Progress bar fill |
-| `bar_fg_warn` | `"#e05050"` | Progress bar fill when usage outpaces elapsed time, error text |
-| `bar_divider` | `"#000c"` | Time dividers on progress bars (hour marks on the session bar, midnights on weekly bars) |
+| `bar_fg_warn` | `"#e05050"` | Progress bar fill for an exhausted quota, error text |
+| `bar_divider` | `"#000c"` | Time dividers on progress bars |
 | `bar_marker` | `"#fffc"` | Time-position marker on progress bars |
+
+`bar_divider` and `bar_marker` have no visible effect in this version: both need a real period boundary to place their marks against, and every Copilot quota field's reset timestamp is always empty (see [Tray icon bars](#tray-icon-bars) above). The settings are still accepted so a shared settings file with the Claude or Codex monitor does not error out.

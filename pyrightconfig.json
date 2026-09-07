@@ -1,12 +1,12 @@
 {
     "include": [
-        "usage_monitor_for_codex/api.py",
-        "usage_monitor_for_codex/cache.py",
-        "usage_monitor_for_codex/codex_cli.py",
-        "usage_monitor_for_codex/formatting.py",
-        "usage_monitor_for_codex/settings.py",
-        "usage_monitor_for_codex/tray_icon.py",
-        "usage_monitor_for_codex/verbose.py",
+        "usage_monitor_for_copilot/api.py",
+        "usage_monitor_for_copilot/cache.py",
+        "usage_monitor_for_copilot/copilot_cli.py",
+        "usage_monitor_for_copilot/formatting.py",
+        "usage_monitor_for_copilot/settings.py",
+        "usage_monitor_for_copilot/tray_icon.py",
+        "usage_monitor_for_copilot/verbose.py",
         "tools"
     ],
     "pythonVersion": "3.10",

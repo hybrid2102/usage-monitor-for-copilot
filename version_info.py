@@ -16,11 +16,11 @@ VSVersionInfo(
                 '040904B0',  # Lang: US English, Charset: Unicode
                 [
                     StringStruct('CompanyName', 'hybrid2102'),
-                    StringStruct('FileDescription', 'Usage Monitor for Codex'),
+                    StringStruct('FileDescription', 'Usage Monitor for Copilot'),
                     StringStruct('FileVersion', '0.1.0.0'),
-                    StringStruct('InternalName', 'UsageMonitorForCodex'),
-                    StringStruct('OriginalFilename', 'UsageMonitorForCodex.exe'),
-                    StringStruct('ProductName', 'Usage Monitor for Codex'),
+                    StringStruct('InternalName', 'UsageMonitorForCopilot'),
+                    StringStruct('OriginalFilename', 'UsageMonitorForCopilot.exe'),
+                    StringStruct('ProductName', 'Usage Monitor for Copilot'),
                     StringStruct('ProductVersion', '0.1.0.0'),
                 ],
             ),

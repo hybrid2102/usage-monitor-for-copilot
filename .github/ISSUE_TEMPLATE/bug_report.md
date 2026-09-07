@@ -7,15 +7,14 @@ labels: ''
 <!-- Tip: If the app fails to start or behaves unexpectedly, running with
 --verbose prints system diagnostics that help identify the problem:
 
-  UsageMonitorForCodex.exe --verbose
+  UsageMonitorForCopilot.exe --verbose
 
 or from source:
 
-  python -m usage_monitor_for_codex --verbose
+  python -m usage_monitor_for_copilot --verbose
 
 To collect the output as a file, redirect both streams (cmd.exe):
 
-  UsageMonitorForCodex.exe --verbose > log.txt 2>&1
+  UsageMonitorForCopilot.exe --verbose > log.txt 2>&1
 
 Paste the output below if you can - it saves a lot of back and forth. -->
-

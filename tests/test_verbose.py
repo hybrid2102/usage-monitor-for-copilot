@@ -13,7 +13,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from usage_monitor_for_codex.verbose import (
+from usage_monitor_for_copilot.verbose import (
     _login_status,
     _package_version,
     _redact_home,
@@ -32,8 +32,8 @@ class TestRedactHome(unittest.TestCase):
         """Paths under the home directory are redacted with ~."""
         home = str(Path.home())
         self.assertEqual(
-            _redact_home(f'{home}{os.sep}.codex{os.sep}config.toml'),
-            f'~{os.sep}.codex{os.sep}config.toml',
+            _redact_home(f'{home}{os.sep}.copilot{os.sep}config.json'),
+            f'~{os.sep}.copilot{os.sep}config.json',
         )
 
     def test_leaves_other_paths_unchanged(self):
@@ -48,15 +48,15 @@ class TestRedactHome(unittest.TestCase):
     @unittest.skipUnless(sys.platform == 'win32', 'path casing only collapses on Windows')
     def test_case_insensitive_match(self):
         """Windows paths are case-insensitive - a differently-cased home prefix
-        (e.g. CODEX_HOME set as c:\\users\\...) must still be redacted."""
+        (e.g. COPILOT_HOME set as c:\\users\\...) must still be redacted."""
         home = str(Path.home())
-        self.assertEqual(_redact_home(f'{home.swapcase()}{os.sep}.codex{os.sep}file'), f'~{os.sep}.codex{os.sep}file')
+        self.assertEqual(_redact_home(f'{home.swapcase()}{os.sep}.copilot{os.sep}file'), f'~{os.sep}.copilot{os.sep}file')
 
     @unittest.skipIf(sys.platform == 'win32', 'POSIX paths are case-sensitive')
     def test_case_sensitive_on_posix(self):
         """A differently-cased prefix names a different directory on POSIX."""
         home = str(Path.home())
-        path = f'{home.swapcase()}{os.sep}.codex'
+        path = f'{home.swapcase()}{os.sep}.copilot'
         self.assertEqual(_redact_home(path), path)
 
     def test_prefix_boundary_not_partially_redacted(self):
@@ -134,14 +134,14 @@ class TestPackageVersion(unittest.TestCase):
 
 
 class TestLoginStatus(unittest.TestCase):
-    """Tests for the non-invasive Codex CLI login probe."""
+    """Tests for the non-invasive Copilot CLI login probe."""
 
-    @patch('usage_monitor_for_codex.verbose.refresh_token')
+    @patch('usage_monitor_for_copilot.verbose.refresh_token')
     def test_signed_in(self, probe):
         probe.return_value = MagicMock(success=True, error='')
         self.assertEqual(_login_status(), 'signed in')
 
-    @patch('usage_monitor_for_codex.verbose.refresh_token')
+    @patch('usage_monitor_for_copilot.verbose.refresh_token')
     def test_signed_out(self, probe):
         probe.return_value = MagicMock(success=False, error='Not logged in')
         self.assertEqual(_login_status(), 'unavailable (Not logged in)')
@@ -157,11 +157,11 @@ class TestPrintStartupDiagnostics(unittest.TestCase):
     def _run(self) -> str:
         buf = io.StringIO()
         with patch('sys.stdout', buf), \
-             patch('usage_monitor_for_codex.verbose.diagnostic_system_rows', return_value=[('OS', 'TestOS')]), \
-             patch('usage_monitor_for_codex.verbose.diagnostic_display_rows', return_value=[('Monitors', '2')]), \
-             patch('usage_monitor_for_codex.verbose.diagnostic_runtime_rows', return_value=[('Toolkit', '1.0')]), \
-             patch('usage_monitor_for_codex.verbose.DIAGNOSTIC_PACKAGES', ('Pillow',)), \
-             patch('usage_monitor_for_codex.verbose.refresh_token', return_value=MagicMock(success=True, error='')):
+             patch('usage_monitor_for_copilot.verbose.diagnostic_system_rows', return_value=[('OS', 'TestOS')]), \
+             patch('usage_monitor_for_copilot.verbose.diagnostic_display_rows', return_value=[('Monitors', '2')]), \
+             patch('usage_monitor_for_copilot.verbose.diagnostic_runtime_rows', return_value=[('Toolkit', '1.0')]), \
+             patch('usage_monitor_for_copilot.verbose.DIAGNOSTIC_PACKAGES', ('Pillow',)), \
+             patch('usage_monitor_for_copilot.verbose.refresh_token', return_value=MagicMock(success=True, error='')):
             print_startup_diagnostics()
 
         return buf.getvalue()
@@ -175,7 +175,7 @@ class TestPrintStartupDiagnostics(unittest.TestCase):
 
     def test_contains_version(self):
         """Output includes the app version."""
-        from usage_monitor_for_codex import __version__
+        from usage_monitor_for_copilot import __version__
 
         self.assertIn(__version__, self._run())
 
@@ -206,7 +206,7 @@ class TestPrintRuntimeDiagnostics(unittest.TestCase):
 
         with patch('sys.stdout', buf), \
              patch.dict('sys.modules', {'webview': mock_webview}), \
-             patch('usage_monitor_for_codex.verbose.diagnostic_post_init_rows', return_value=[]):
+             patch('usage_monitor_for_copilot.verbose.diagnostic_post_init_rows', return_value=[]):
             print_runtime_diagnostics()
 
         output = buf.getvalue()
@@ -221,7 +221,7 @@ class TestPrintRuntimeDiagnostics(unittest.TestCase):
 
         with patch('sys.stdout', buf), \
              patch.dict('sys.modules', {'webview': mock_webview}), \
-             patch('usage_monitor_for_codex.verbose.diagnostic_post_init_rows',
+             patch('usage_monitor_for_copilot.verbose.diagnostic_post_init_rows',
                    return_value=[('Toolkit runtime', '3.24.52')]):
             print_runtime_diagnostics()
 
@@ -236,7 +236,7 @@ class TestPrintRuntimeDiagnostics(unittest.TestCase):
 
         with patch('sys.stdout', buf), \
              patch.dict('sys.modules', {'webview': mock_webview}), \
-             patch('usage_monitor_for_codex.verbose.diagnostic_post_init_rows', return_value=[]):
+             patch('usage_monitor_for_copilot.verbose.diagnostic_post_init_rows', return_value=[]):
             print_runtime_diagnostics()
 
         self.assertIn('unknown', buf.getvalue())

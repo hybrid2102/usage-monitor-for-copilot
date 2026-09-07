@@ -16,7 +16,7 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-_POPUP_JS = Path(__file__).parent.parent / 'usage_monitor_for_codex' / 'popup' / 'popup.js'
+_POPUP_JS = Path(__file__).parent.parent / 'usage_monitor_for_copilot' / 'popup' / 'popup.js'
 
 _NODE = shutil.which('node')
 

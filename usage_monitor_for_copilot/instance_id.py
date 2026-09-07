@@ -2,13 +2,13 @@
 Instance Identity
 ==================
 
-Derives a per-instance identifier from the effective Codex config
-directory so multiple monitor instances (one per Codex account) can
+Derives a per-instance identifier from the effective Copilot config
+directory so multiple monitor instances (one per Copilot account) can
 coexist, each guarding its own single-instance mutex and autostart
 registry entry.
 
 This module must stay free of imports from ``api`` or ``settings`` -
-it is used before ``CODEX_HOME`` is finalized in ``__main__``.
+it is used before ``COPILOT_HOME`` is finalized in ``__main__``.
 """
 from __future__ import annotations
 
@@ -64,22 +64,22 @@ def parse_config_dir(argv: list[str]) -> str | None:
 
 
 def effective_config_dir() -> Path:
-    """Return the resolved Codex config directory currently in effect."""
-    custom = os.environ.get('CODEX_HOME')
-    base = Path(custom) if custom else Path.home() / '.codex'
+    """Return the resolved Copilot config directory currently in effect."""
+    custom = os.environ.get('COPILOT_HOME')
+    base = Path(custom) if custom else Path.home() / '.copilot'
     return base.resolve()
 
 
 def is_default_config_dir() -> bool:
-    """Return True when the effective config dir is the default ``~/.codex``."""
-    default = (Path.home() / '.codex').resolve()
+    """Return True when the effective config dir is the default ``~/.copilot``."""
+    default = (Path.home() / '.copilot').resolve()
     return os.path.normcase(str(effective_config_dir())) == os.path.normcase(str(default))
 
 
 def config_dir_suffix() -> str:
     """Return a per-instance suffix for kernel object and registry names.
 
-    Empty for the default ``~/.codex`` directory (preserving the legacy
+    Empty for the default ``~/.copilot`` directory (preserving the legacy
     names so older versions are still detected), otherwise an underscore
     plus a short hash of the resolved, case-normalized directory path.
     Hashing keeps the names free of characters that are invalid in Win32

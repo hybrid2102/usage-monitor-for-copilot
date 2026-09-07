@@ -21,8 +21,8 @@ from .win32 import ask_yes_no, show_topmost_error
 
 __all__ = ['ensure_single_instance', 'release_instance_lock']
 
-_MUTEX_BASE_NAME = 'UsageMonitorForCodex_SingleInstance'
-_PID_MAPPING_BASE_NAME = 'UsageMonitorForCodex_HolderPID'
+_MUTEX_BASE_NAME = 'UsageMonitorForCopilot_SingleInstance'
+_PID_MAPPING_BASE_NAME = 'UsageMonitorForCopilot_HolderPID'
 _ERROR_ACCESS_DENIED = 0x5
 _ERROR_ALREADY_EXISTS = 0xB7
 _INVALID_HANDLE = ctypes.c_void_p(-1).value
@@ -81,7 +81,7 @@ def _object_names() -> tuple[str, str]:
     """Return the per-instance ``(mutex_name, pid_mapping_name)`` pair.
 
     The names carry a config-dir suffix so one monitor instance per
-    Codex account can run concurrently, each a singleton for its own
+    Copilot account can run concurrently, each a singleton for its own
     config directory.
     """
     suffix = config_dir_suffix()

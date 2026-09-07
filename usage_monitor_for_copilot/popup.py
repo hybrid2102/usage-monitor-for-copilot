@@ -8,7 +8,7 @@ This module owns the data flow: what the popup shows, how a cache snapshot
 becomes the payload for the JavaScript side, and when an update is pushed.
 Everything about the window itself - styles, transparency while measuring,
 anchoring, dismissal and the pinned drag - belongs to the platform host in
-:mod:`usage_monitor_for_codex.platforms.popup`.
+:mod:`usage_monitor_for_copilot.platforms.popup`.
 """
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING, Any
 import webview  # type: ignore[import-untyped]  # no type stubs available
 
 from . import __version__
-from .codex_cli import CHANGELOG_URL, find_installations
+from .copilot_cli import CHANGELOG_URL, find_installations
 from .formatting import divider_positions, elapsed_pct, expand_popup_fields, field_period, format_credits, popup_label, time_until
 from .i18n import T
 from .platforms.popup import WINDOW_KWARGS, PopupHost, popup_url
@@ -33,7 +33,7 @@ _POPUP_DIR = Path(__file__).parent / 'popup'
 __all__ = ['UsagePopup']
 
 if TYPE_CHECKING:
-    from .app import UsageMonitorForCodex
+    from .app import UsageMonitorForCopilot
     from .cache import CacheSnapshot
 
 
@@ -186,7 +186,7 @@ def _init_config(snap: CacheSnapshot, next_poll_time: float | None = None) -> di
         't': {
             'title': T['popup_title'], 'account': T['account'], 'email': T['email'], 'plan': T['plan'],
             'usage': T['usage'], 'extra_usage': T['extra_usage'],
-            'codex_code': T['codex_code'], 'changelog': T['changelog'],
+            'copilot_code': T['copilot_code'], 'changelog': T['changelog'],
             'pin_popup': T['pin_popup'], 'unpin_popup': T['unpin_popup'],
             'status_updated_s': T['status_updated_s'], 'status_updated': T['status_updated'],
             'status_next_update': T['status_next_update'], 'status_refreshing': T['status_refreshing'],
@@ -245,7 +245,7 @@ class UsagePopup:
     _CHECK_MS = 2000
     _INITIAL_HEIGHT = 400
 
-    def __init__(self, app: UsageMonitorForCodex) -> None:
+    def __init__(self, app: UsageMonitorForCopilot) -> None:
         """Create and display a popup window with usage details.
 
         Blocks the calling thread until the window is closed.
@@ -253,7 +253,7 @@ class UsagePopup:
 
         Parameters
         ----------
-        app : UsageMonitorForCodex
+        app : UsageMonitorForCopilot
             Parent application providing ``cache`` for data access.
         """
         self.app = app

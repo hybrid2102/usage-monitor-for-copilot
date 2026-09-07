@@ -13,7 +13,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
-from usage_monitor_for_codex.i18n import LOCALE_DIR, detect_lang_code, load_translations
+from usage_monitor_for_copilot.i18n import LOCALE_DIR, detect_lang_code, load_translations
 
 MOCK_LOCALE_FILES = ['en.json', 'de.json', 'es.json', 'fr.json', 'hi.json', 'id.json', 'ja.json', 'pt-BR.json', 'uk.json', 'zh-CN.json', 'zh-TW.json']
 
@@ -44,7 +44,7 @@ def _mock_normalize(locale_string):
 # detect_lang_code
 # ---------------------------------------------------------------------------
 
-@patch('usage_monitor_for_codex.i18n.locale.normalize', side_effect=_mock_normalize)
+@patch('usage_monitor_for_copilot.i18n.locale.normalize', side_effect=_mock_normalize)
 class TestDetectLangCode(unittest.TestCase):
     """Tests for detect_lang_code()."""
 
@@ -53,7 +53,7 @@ class TestDetectLangCode(unittest.TestCase):
         self._locale_dir = Path(self._tmp.name)
         for name in MOCK_LOCALE_FILES:
             (self._locale_dir / name).write_text('{}')
-        self._patch_dir = patch('usage_monitor_for_codex.i18n.LOCALE_DIR', self._locale_dir)
+        self._patch_dir = patch('usage_monitor_for_copilot.i18n.LOCALE_DIR', self._locale_dir)
         self._patch_dir.start()
 
     def tearDown(self):
@@ -148,9 +148,9 @@ class TestDetectLangCode(unittest.TestCase):
 class TestLoadTranslations(unittest.TestCase):
     """Tests for load_translations()."""
 
-    @patch('usage_monitor_for_codex.settings.LANGUAGE', '')
-    @patch('usage_monitor_for_codex.i18n.locale.normalize', side_effect=_mock_normalize)
-    @patch('usage_monitor_for_codex.i18n.locale.getlocale', return_value=('de_DE', 'UTF-8'))
+    @patch('usage_monitor_for_copilot.settings.LANGUAGE', '')
+    @patch('usage_monitor_for_copilot.i18n.locale.normalize', side_effect=_mock_normalize)
+    @patch('usage_monitor_for_copilot.i18n.locale.getlocale', return_value=('de_DE', 'UTF-8'))
     def test_loads_detected_locale(self, _mock_get, _mock_norm):
         """Loads the JSON file matching the detected system locale."""
         with TemporaryDirectory() as tmp:
@@ -158,21 +158,21 @@ class TestLoadTranslations(unittest.TestCase):
             (locale_dir / 'en.json').write_text('{"title": "English"}')
             (locale_dir / 'de.json').write_text('{"title": "Deutsch"}')
 
-            with patch('usage_monitor_for_codex.i18n.LOCALE_DIR', locale_dir):
+            with patch('usage_monitor_for_copilot.i18n.LOCALE_DIR', locale_dir):
                 result = load_translations()
 
         self.assertEqual(result['title'], 'Deutsch')
 
-    @patch('usage_monitor_for_codex.settings.LANGUAGE', '')
-    @patch('usage_monitor_for_codex.i18n.locale.normalize', side_effect=_mock_normalize)
-    @patch('usage_monitor_for_codex.i18n.locale.getlocale', return_value=(None, None))
+    @patch('usage_monitor_for_copilot.settings.LANGUAGE', '')
+    @patch('usage_monitor_for_copilot.i18n.locale.normalize', side_effect=_mock_normalize)
+    @patch('usage_monitor_for_copilot.i18n.locale.getlocale', return_value=(None, None))
     def test_none_locale_falls_back_to_english(self, _mock_get, _mock_norm):
         """None from getlocale() falls back to English."""
         with TemporaryDirectory() as tmp:
             locale_dir = Path(tmp)
             (locale_dir / 'en.json').write_text('{"title": "English"}')
 
-            with patch('usage_monitor_for_codex.i18n.LOCALE_DIR', locale_dir):
+            with patch('usage_monitor_for_copilot.i18n.LOCALE_DIR', locale_dir):
                 result = load_translations()
 
         self.assertEqual(result['title'], 'English')
@@ -184,15 +184,15 @@ class TestLoadTranslations(unittest.TestCase):
             (locale_dir / 'en.json').write_text('{"title": "English"}')
             (locale_dir / 'ja.json').write_text('{"title": "Japanese"}')
 
-            with patch('usage_monitor_for_codex.settings.LANGUAGE', 'ja'), \
-                 patch('usage_monitor_for_codex.i18n.LOCALE_DIR', locale_dir):
+            with patch('usage_monitor_for_copilot.settings.LANGUAGE', 'ja'), \
+                 patch('usage_monitor_for_copilot.i18n.LOCALE_DIR', locale_dir):
                 result = load_translations()
 
         self.assertEqual(result['title'], 'Japanese')
 
-    @patch('usage_monitor_for_codex.settings.LANGUAGE', 'xx')
-    @patch('usage_monitor_for_codex.i18n.locale.normalize', side_effect=_mock_normalize)
-    @patch('usage_monitor_for_codex.i18n.locale.getlocale', return_value=('de_DE', 'UTF-8'))
+    @patch('usage_monitor_for_copilot.settings.LANGUAGE', 'xx')
+    @patch('usage_monitor_for_copilot.i18n.locale.normalize', side_effect=_mock_normalize)
+    @patch('usage_monitor_for_copilot.i18n.locale.getlocale', return_value=('de_DE', 'UTF-8'))
     def test_invalid_language_setting_falls_back_to_locale(self, _mock_get, _mock_norm):
         """Invalid LANGUAGE setting falls back to locale detection."""
         with TemporaryDirectory() as tmp:
@@ -200,7 +200,7 @@ class TestLoadTranslations(unittest.TestCase):
             (locale_dir / 'en.json').write_text('{"title": "English"}')
             (locale_dir / 'de.json').write_text('{"title": "Deutsch"}')
 
-            with patch('usage_monitor_for_codex.i18n.LOCALE_DIR', locale_dir):
+            with patch('usage_monitor_for_copilot.i18n.LOCALE_DIR', locale_dir):
                 result = load_translations()
 
         self.assertEqual(result['title'], 'Deutsch')
@@ -274,7 +274,7 @@ class TestLocaleConsistency(unittest.TestCase):
         for lang, data in self.translations.items():
             for key in keys:
                 self.assertTrue(
-                    data[key].endswith('codex login'),
+                    data[key].endswith('copilot login'),
                     f'{lang}.json key "{key}" does not end with the login command: {data[key]!r}',
                 )
 

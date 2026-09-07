@@ -11,15 +11,15 @@ import unittest
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
-from usage_monitor_for_codex.app import (
-    POLL_FAST, RESET_BUFFER, UsageMonitorForCodex, _align_to_reset,
+from usage_monitor_for_copilot.app import (
+    POLL_FAST, RESET_BUFFER, UsageMonitorForCopilot, _align_to_reset,
 )
-from usage_monitor_for_codex.cache import UpdateResult
-from usage_monitor_for_codex.codex_cli import RefreshResult
+from usage_monitor_for_copilot.cache import UpdateResult
+from usage_monitor_for_copilot.copilot_cli import RefreshResult
 
 
-def _make_app(thresholds: list[float] | None = None) -> UsageMonitorForCodex:
-    """Create a UsageMonitorForCodex with mocked icon and configurable thresholds.
+def _make_app(thresholds: list[float] | None = None) -> UsageMonitorForCopilot:
+    """Create a UsageMonitorForCopilot with mocked icon and configurable thresholds.
 
     Parameters
     ----------
@@ -28,10 +28,10 @@ def _make_app(thresholds: list[float] | None = None) -> UsageMonitorForCodex:
     """
     if thresholds is None:
         thresholds = [80, 95]
-    with patch('usage_monitor_for_codex.app.pystray'), \
-         patch('usage_monitor_for_codex.app.create_icon_image'), \
-         patch('usage_monitor_for_codex.app.taskbar_uses_light_theme', return_value=False):
-        app = UsageMonitorForCodex()
+    with patch('usage_monitor_for_copilot.app.pystray'), \
+         patch('usage_monitor_for_copilot.app.create_icon_image'), \
+         patch('usage_monitor_for_copilot.app.taskbar_uses_light_theme', return_value=False):
+        app = UsageMonitorForCopilot()
     app.icon = MagicMock()
     # Patches active for the app's lifetime, stopped by _cleanup.  The presence
     # defaults keep _is_user_away() False so notification tests are deterministic
@@ -40,24 +40,24 @@ def _make_app(thresholds: list[float] | None = None) -> UsageMonitorForCodex:
     # usage-monitor-settings.json present on the machine running the suite
     # (tests for custom fields override it per test).
     app._patches = [
-        patch('usage_monitor_for_codex.app.get_alert_thresholds', return_value=thresholds),
-        patch('usage_monitor_for_codex.app.is_workstation_locked', return_value=False),
-        patch('usage_monitor_for_codex.app.is_screensaver_running', return_value=False),
-        patch('usage_monitor_for_codex.app.get_idle_seconds', return_value=0.0),
-        patch('usage_monitor_for_codex.app.ICON_FIELDS', ['five_hour', 'seven_day']),
+        patch('usage_monitor_for_copilot.app.get_alert_thresholds', return_value=thresholds),
+        patch('usage_monitor_for_copilot.app.is_workstation_locked', return_value=False),
+        patch('usage_monitor_for_copilot.app.is_screensaver_running', return_value=False),
+        patch('usage_monitor_for_copilot.app.get_idle_seconds', return_value=0.0),
+        patch('usage_monitor_for_copilot.app.ICON_FIELDS', ['chat', 'completions']),
     ]
     for active_patch in app._patches:
         active_patch.start()
     return app
 
 
-def _cleanup(app: UsageMonitorForCodex) -> None:
+def _cleanup(app: UsageMonitorForCopilot) -> None:
     """Stop patches started by _make_app."""
     for active_patch in app._patches:
         active_patch.stop()
 
 
-def _returns_from_away(app: UsageMonitorForCodex):
+def _returns_from_away(app: UsageMonitorForCopilot):
     """Return a _polling_throttled stub that reports away, then present, then ends the loop.
 
     The loop reads the state once before the wait (away) and once at the end of
@@ -74,7 +74,7 @@ def _returns_from_away(app: UsageMonitorForCodex):
     return polling_throttled
 
 
-def _stop_after_one_pass(app: UsageMonitorForCodex):
+def _stop_after_one_pass(app: UsageMonitorForCopilot):
     """Return a _polling_throttled stub that ends poll_loop after one wait pass.
 
     The loop reads the throttle state once before the wait and once at the end
@@ -100,7 +100,7 @@ class TestCheckThresholdAlerts(unittest.TestCase):
 
     def setUp(self):
         self.app = _make_app()
-        self._cmd_patch = patch('usage_monitor_for_codex.app.run_event_command')
+        self._cmd_patch = patch('usage_monitor_for_copilot.app.run_event_command')
         self._cmd_patch.start()
 
     def tearDown(self):
@@ -109,7 +109,7 @@ class TestCheckThresholdAlerts(unittest.TestCase):
 
     def test_notification_on_first_crossing(self):
         """Notification fires when usage crosses a threshold for the first time."""
-        self.app._check_threshold_alerts({'five_hour': {'utilization': 82}})
+        self.app._check_threshold_alerts({'chat': {'utilization': 82}})
 
         self.app.icon.notify.assert_called_once()
         args = self.app.icon.notify.call_args
@@ -117,19 +117,19 @@ class TestCheckThresholdAlerts(unittest.TestCase):
 
     def test_no_duplicate_notification(self):
         """No notification if threshold was already notified."""
-        self.app._check_threshold_alerts({'five_hour': {'utilization': 82}})
+        self.app._check_threshold_alerts({'chat': {'utilization': 82}})
         self.app.icon.notify.reset_mock()
 
-        self.app._check_threshold_alerts({'five_hour': {'utilization': 85}})
+        self.app._check_threshold_alerts({'chat': {'utilization': 85}})
 
         self.app.icon.notify.assert_not_called()
 
     def test_higher_threshold_triggers_new_notification(self):
         """Crossing a higher threshold triggers a new notification."""
-        self.app._check_threshold_alerts({'five_hour': {'utilization': 82}})
+        self.app._check_threshold_alerts({'chat': {'utilization': 82}})
         self.app.icon.notify.reset_mock()
 
-        self.app._check_threshold_alerts({'five_hour': {'utilization': 97}})
+        self.app._check_threshold_alerts({'chat': {'utilization': 97}})
 
         self.app.icon.notify.assert_called_once()
         args = self.app.icon.notify.call_args
@@ -137,29 +137,29 @@ class TestCheckThresholdAlerts(unittest.TestCase):
 
     def test_jump_past_multiple_thresholds_single_notification(self):
         """Jumping from below all thresholds to above multiple shows only one notification."""
-        self.app._check_threshold_alerts({'five_hour': {'utilization': 97}})
+        self.app._check_threshold_alerts({'chat': {'utilization': 97}})
 
         self.app.icon.notify.assert_called_once()
-        self.assertEqual(self.app._notified_thresholds.get('five_hour'), 95)
+        self.assertEqual(self.app._notified_thresholds.get('chat'), 95)
 
     def test_notification_shows_current_pct_not_threshold(self):
         """Notification message contains the actual usage %, not the threshold value."""
-        self.app._check_threshold_alerts({'five_hour': {'utilization': 83.7}})
+        self.app._check_threshold_alerts({'chat': {'utilization': 83.7}})
 
         args = self.app.icon.notify.call_args
         self.assertIn('84%', args[0][0])
 
     def test_re_notification_after_usage_drops(self):
         """After usage drops below a threshold, it can re-trigger."""
-        self.app._check_threshold_alerts({'five_hour': {'utilization': 82}})
+        self.app._check_threshold_alerts({'chat': {'utilization': 82}})
         self.app.icon.notify.reset_mock()
 
         # Usage drops below 80 (e.g. after reset)
-        self.app._check_threshold_alerts({'five_hour': {'utilization': 30}})
+        self.app._check_threshold_alerts({'chat': {'utilization': 30}})
         self.app.icon.notify.assert_not_called()
 
         # Usage rises above 80 again
-        self.app._check_threshold_alerts({'five_hour': {'utilization': 81}})
+        self.app._check_threshold_alerts({'chat': {'utilization': 81}})
         self.app.icon.notify.assert_called_once()
 
     def test_no_notification_when_thresholds_empty(self):
@@ -167,39 +167,39 @@ class TestCheckThresholdAlerts(unittest.TestCase):
         _cleanup(self.app)
         self.app = _make_app(thresholds=[])
 
-        self.app._check_threshold_alerts({'five_hour': {'utilization': 99}})
+        self.app._check_threshold_alerts({'chat': {'utilization': 99}})
 
         self.app.icon.notify.assert_not_called()
 
     def test_on_startup_above_threshold(self):
         """On startup (no prior state), notification fires if already above threshold."""
-        self.app._check_threshold_alerts({'five_hour': {'utilization': 90}})
+        self.app._check_threshold_alerts({'chat': {'utilization': 90}})
 
         self.app.icon.notify.assert_called_once()
 
     def test_each_variant_tracked_independently(self):
         """Different variants are tracked independently."""
         self.app._check_threshold_alerts({
-            'five_hour': {'utilization': 82},
-            'seven_day': {'utilization': 50},
+            'chat': {'utilization': 82},
+            'completions': {'utilization': 50},
         })
 
         self.app.icon.notify.assert_called_once()
-        self.assertEqual(self.app._notified_thresholds.get('five_hour'), 80)
-        self.assertEqual(self.app._notified_thresholds.get('seven_day', 0), 0)
+        self.assertEqual(self.app._notified_thresholds.get('chat'), 80)
+        self.assertEqual(self.app._notified_thresholds.get('completions', 0), 0)
 
     def test_multiple_variants_crossing_simultaneously(self):
         """Multiple variants crossing thresholds each get their own notification."""
         self.app._check_threshold_alerts({
-            'five_hour': {'utilization': 82},
-            'seven_day': {'utilization': 96},
+            'chat': {'utilization': 82},
+            'completions': {'utilization': 96},
         })
 
         self.assertEqual(self.app.icon.notify.call_count, 2)
 
     def test_variant_with_no_utilization_skipped(self):
         """Variants with None utilization are skipped."""
-        self.app._check_threshold_alerts({'five_hour': {'utilization': None}})
+        self.app._check_threshold_alerts({'chat': {'utilization': None}})
 
         self.app.icon.notify.assert_not_called()
 
@@ -211,13 +211,13 @@ class TestCheckThresholdAlerts(unittest.TestCase):
 
     def test_usage_exactly_at_threshold(self):
         """Usage exactly at threshold value triggers notification."""
-        self.app._check_threshold_alerts({'five_hour': {'utilization': 80}})
+        self.app._check_threshold_alerts({'chat': {'utilization': 80}})
 
         self.app.icon.notify.assert_called_once()
 
     def test_usage_just_below_threshold(self):
         """Usage just below threshold does not trigger notification."""
-        self.app._check_threshold_alerts({'five_hour': {'utilization': 79.9}})
+        self.app._check_threshold_alerts({'chat': {'utilization': 79.9}})
 
         self.app.icon.notify.assert_not_called()
 
@@ -226,32 +226,20 @@ class TestCheckThresholdAlerts(unittest.TestCase):
         self.app._check_threshold_alerts({
             'error': 'server down',
             'rate_limited': True,
-            'five_hour': {'utilization': 82},
+            'chat': {'utilization': 82},
         })
 
         self.app.icon.notify.assert_called_once()
 
-    def test_extra_usage_excluded_from_regular_alerts(self):
-        """extra_usage is handled separately, not by the regular threshold loop."""
-        _cleanup(self.app)
-        self.app = _make_app(thresholds=[50])
-
-        with patch.object(self.app, '_check_extra_usage_alerts'):
-            self.app._check_threshold_alerts({
-                'extra_usage': {'is_enabled': True, 'monthly_limit': 1000, 'used_credits': 800, 'utilization': 80},
-            })
-
-        self.app.icon.notify.assert_not_called()
-
     def test_null_entry_skipped(self):
         """Null entry value is silently skipped."""
-        self.app._check_threshold_alerts({'five_hour': None, 'seven_day': {'utilization': 82}})
+        self.app._check_threshold_alerts({'chat': None, 'completions': {'utilization': 82}})
 
         self.app.icon.notify.assert_called_once()
 
     def test_entry_without_utilization_key_skipped(self):
         """Entry dict without utilization key is silently skipped."""
-        self.app._check_threshold_alerts({'five_hour': {'resets_at': '2026-01-01T05:00:00Z'}})
+        self.app._check_threshold_alerts({'chat': {'resets_at': '2026-01-01T05:00:00Z'}})
 
         self.app.icon.notify.assert_not_called()
 
@@ -260,14 +248,14 @@ class TestCheckThresholdAlerts(unittest.TestCase):
         _cleanup(self.app)
         self.app = _make_app()
 
-        # seven_day_cowork is not in the hardcoded thresholds but falls back to seven_day
-        self.app._check_threshold_alerts({'seven_day_cowork': {'utilization': 96}})
+        # new_quota_type is not in the hardcoded thresholds but falls back to completions
+        self.app._check_threshold_alerts({'new_quota_type': {'utilization': 96}})
 
         self.app.icon.notify.assert_called_once()
 
     def test_field_without_resets_at_alerts_normally(self):
         """Field missing resets_at still triggers threshold alert (time-aware falls back gracefully)."""
-        self.app._check_threshold_alerts({'five_hour': {'utilization': 82}})
+        self.app._check_threshold_alerts({'chat': {'utilization': 82}})
 
         self.app.icon.notify.assert_called_once()
 
@@ -281,14 +269,21 @@ class TestTimeAwareAlerts(unittest.TestCase):
 
     def setUp(self):
         self.app = _make_app()
-        self._cmd_patch = patch('usage_monitor_for_codex.app.run_event_command')
-        self._time_aware_patch = patch('usage_monitor_for_codex.app.ALERT_TIME_AWARE', True)
-        self._below_patch = patch('usage_monitor_for_codex.app.ALERT_TIME_AWARE_BELOW', 100)
+        self._cmd_patch = patch('usage_monitor_for_copilot.app.run_event_command')
+        self._time_aware_patch = patch('usage_monitor_for_copilot.app.ALERT_TIME_AWARE', True)
+        self._below_patch = patch('usage_monitor_for_copilot.app.ALERT_TIME_AWARE_BELOW', 100)
+        # Unlike Claude/Codex's five_hour/seven_day naming, real Copilot field
+        # names carry no period - field_period would return None and bypass
+        # elapsed_pct entirely, making every test below vacuous.  Patched
+        # truthy here so this still exercises the shared time-aware logic.
+        self._period_patch = patch('usage_monitor_for_copilot.app.field_period', return_value=18000)
         self._cmd_patch.start()
         self._time_aware_patch.start()
         self._below_patch.start()
+        self._period_patch.start()
 
     def tearDown(self):
+        self._period_patch.stop()
         self._below_patch.stop()
         self._time_aware_patch.stop()
         self._cmd_patch.stop()
@@ -296,67 +291,67 @@ class TestTimeAwareAlerts(unittest.TestCase):
 
     def test_alert_suppressed_when_usage_behind_time(self):
         """No notification when usage (82%) <= elapsed time (90%)."""
-        with patch('usage_monitor_for_codex.app.elapsed_pct', return_value=90.0):
-            self.app._check_threshold_alerts({'five_hour': {'utilization': 82, 'resets_at': '2025-01-15T14:30:00+00:00'}})
+        with patch('usage_monitor_for_copilot.app.elapsed_pct', return_value=90.0):
+            self.app._check_threshold_alerts({'chat': {'utilization': 82, 'resets_at': '2025-01-15T14:30:00+00:00'}})
 
         self.app.icon.notify.assert_not_called()
 
     def test_alert_shown_when_usage_ahead_of_time(self):
         """Notification fires when usage (82%) > elapsed time (50%)."""
-        with patch('usage_monitor_for_codex.app.elapsed_pct', return_value=50.0):
-            self.app._check_threshold_alerts({'five_hour': {'utilization': 82, 'resets_at': '2025-01-15T14:30:00+00:00'}})
+        with patch('usage_monitor_for_copilot.app.elapsed_pct', return_value=50.0):
+            self.app._check_threshold_alerts({'chat': {'utilization': 82, 'resets_at': '2025-01-15T14:30:00+00:00'}})
 
         self.app.icon.notify.assert_called_once()
 
     def test_fallback_when_elapsed_pct_none(self):
         """Notification fires normally when elapsed_pct returns None (no resets_at)."""
-        with patch('usage_monitor_for_codex.app.elapsed_pct', return_value=None):
-            self.app._check_threshold_alerts({'five_hour': {'utilization': 82}})
+        with patch('usage_monitor_for_copilot.app.elapsed_pct', return_value=None):
+            self.app._check_threshold_alerts({'chat': {'utilization': 82}})
 
         self.app.icon.notify.assert_called_once()
 
     def test_tracking_updated_when_suppressed(self):
         """Notified threshold tracking is updated even when alert is suppressed."""
-        with patch('usage_monitor_for_codex.app.elapsed_pct', return_value=90.0):
-            self.app._check_threshold_alerts({'five_hour': {'utilization': 82, 'resets_at': '2025-01-15T14:30:00+00:00'}})
+        with patch('usage_monitor_for_copilot.app.elapsed_pct', return_value=90.0):
+            self.app._check_threshold_alerts({'chat': {'utilization': 82, 'resets_at': '2025-01-15T14:30:00+00:00'}})
 
-        self.assertEqual(self.app._notified_thresholds.get('five_hour'), 80)
+        self.assertEqual(self.app._notified_thresholds.get('chat'), 80)
 
     def test_no_re_notification_after_suppression(self):
         """After suppression, the same threshold does not re-trigger."""
-        with patch('usage_monitor_for_codex.app.elapsed_pct', return_value=90.0):
-            self.app._check_threshold_alerts({'five_hour': {'utilization': 82, 'resets_at': '2025-01-15T14:30:00+00:00'}})
+        with patch('usage_monitor_for_copilot.app.elapsed_pct', return_value=90.0):
+            self.app._check_threshold_alerts({'chat': {'utilization': 82, 'resets_at': '2025-01-15T14:30:00+00:00'}})
 
         # Now time catches up less - usage is ahead, but threshold already tracked
-        with patch('usage_monitor_for_codex.app.elapsed_pct', return_value=50.0):
-            self.app._check_threshold_alerts({'five_hour': {'utilization': 84, 'resets_at': '2025-01-15T14:30:00+00:00'}})
+        with patch('usage_monitor_for_copilot.app.elapsed_pct', return_value=50.0):
+            self.app._check_threshold_alerts({'chat': {'utilization': 84, 'resets_at': '2025-01-15T14:30:00+00:00'}})
 
         self.app.icon.notify.assert_not_called()
 
     def test_disabled_when_false(self):
         """With ALERT_TIME_AWARE=False, alerts fire regardless of time."""
         self._time_aware_patch.stop()
-        with patch('usage_monitor_for_codex.app.ALERT_TIME_AWARE', False):
-            with patch('usage_monitor_for_codex.app.elapsed_pct', return_value=90.0):
-                self.app._check_threshold_alerts({'five_hour': {'utilization': 82, 'resets_at': '2025-01-15T14:30:00+00:00'}})
+        with patch('usage_monitor_for_copilot.app.ALERT_TIME_AWARE', False):
+            with patch('usage_monitor_for_copilot.app.elapsed_pct', return_value=90.0):
+                self.app._check_threshold_alerts({'chat': {'utilization': 82, 'resets_at': '2025-01-15T14:30:00+00:00'}})
         self._time_aware_patch.start()
 
         self.app.icon.notify.assert_called_once()
 
     def test_usage_equal_to_time_suppressed(self):
         """Notification suppressed when usage exactly equals elapsed time."""
-        with patch('usage_monitor_for_codex.app.elapsed_pct', return_value=82.0):
-            self.app._check_threshold_alerts({'five_hour': {'utilization': 82, 'resets_at': '2025-01-15T14:30:00+00:00'}})
+        with patch('usage_monitor_for_copilot.app.elapsed_pct', return_value=82.0):
+            self.app._check_threshold_alerts({'chat': {'utilization': 82, 'resets_at': '2025-01-15T14:30:00+00:00'}})
 
         self.app.icon.notify.assert_not_called()
 
     def test_threshold_at_or_above_below_cutoff_always_fires(self):
         """Threshold >= alert_time_aware_below fires even when usage <= time."""
         self._below_patch.stop()
-        with patch('usage_monitor_for_codex.app.ALERT_TIME_AWARE_BELOW', 90):
+        with patch('usage_monitor_for_copilot.app.ALERT_TIME_AWARE_BELOW', 90):
             # Thresholds are [80, 95]. Usage crosses 95 which is >= 90 cutoff.
-            with patch('usage_monitor_for_codex.app.elapsed_pct', return_value=98.0):
-                self.app._check_threshold_alerts({'five_hour': {'utilization': 97, 'resets_at': '2025-01-15T14:30:00+00:00'}})
+            with patch('usage_monitor_for_copilot.app.elapsed_pct', return_value=98.0):
+                self.app._check_threshold_alerts({'chat': {'utilization': 97, 'resets_at': '2025-01-15T14:30:00+00:00'}})
         self._below_patch.start()
 
         self.app.icon.notify.assert_called_once()
@@ -364,10 +359,10 @@ class TestTimeAwareAlerts(unittest.TestCase):
     def test_threshold_below_cutoff_suppressed(self):
         """Threshold < alert_time_aware_below is suppressed when usage <= time."""
         self._below_patch.stop()
-        with patch('usage_monitor_for_codex.app.ALERT_TIME_AWARE_BELOW', 90):
+        with patch('usage_monitor_for_copilot.app.ALERT_TIME_AWARE_BELOW', 90):
             # Thresholds are [80, 95]. Usage crosses 80 which is < 90 cutoff.
-            with patch('usage_monitor_for_codex.app.elapsed_pct', return_value=90.0):
-                self.app._check_threshold_alerts({'five_hour': {'utilization': 82, 'resets_at': '2025-01-15T14:30:00+00:00'}})
+            with patch('usage_monitor_for_copilot.app.elapsed_pct', return_value=90.0):
+                self.app._check_threshold_alerts({'chat': {'utilization': 82, 'resets_at': '2025-01-15T14:30:00+00:00'}})
         self._below_patch.start()
 
         self.app.icon.notify.assert_not_called()
@@ -375,250 +370,12 @@ class TestTimeAwareAlerts(unittest.TestCase):
     def test_below_cutoff_exact_boundary_fires(self):
         """Threshold exactly at alert_time_aware_below fires regardless of time."""
         self._below_patch.stop()
-        with patch('usage_monitor_for_codex.app.ALERT_TIME_AWARE_BELOW', 80):
-            with patch('usage_monitor_for_codex.app.elapsed_pct', return_value=90.0):
-                self.app._check_threshold_alerts({'five_hour': {'utilization': 82, 'resets_at': '2025-01-15T14:30:00+00:00'}})
+        with patch('usage_monitor_for_copilot.app.ALERT_TIME_AWARE_BELOW', 80):
+            with patch('usage_monitor_for_copilot.app.elapsed_pct', return_value=90.0):
+                self.app._check_threshold_alerts({'chat': {'utilization': 82, 'resets_at': '2025-01-15T14:30:00+00:00'}})
         self._below_patch.start()
 
         self.app.icon.notify.assert_called_once()
-
-
-# ---------------------------------------------------------------------------
-# Extra usage alerts
-# ---------------------------------------------------------------------------
-
-class TestExtraUsageAlerts(unittest.TestCase):
-    """Tests for _check_extra_usage_alerts() notification logic."""
-
-    def setUp(self):
-        self.app = _make_app()
-        self._cmd_patch = patch('usage_monitor_for_codex.app.run_event_command')
-        self._cmd_patch.start()
-
-    def tearDown(self):
-        self._cmd_patch.stop()
-        _cleanup(self.app)
-
-    def _extra_data(self, used: float = 0.0, limit: float = 1000, enabled: bool = True) -> dict:
-        return {'extra_usage': {'is_enabled': enabled, 'monthly_limit': limit, 'used_credits': used, 'utilization': None}}
-
-    def test_notification_at_threshold(self):
-        """Notification fires when extra usage crosses a threshold."""
-        self.app._check_extra_usage_alerts(self._extra_data(used=820, limit=1000))
-
-        self.app.icon.notify.assert_called_once()
-        args = self.app.icon.notify.call_args[0]
-        self.assertIn('82%', args[0])
-
-    def test_no_notification_below_threshold(self):
-        """No notification when usage is below all thresholds."""
-        self.app._check_extra_usage_alerts(self._extra_data(used=100, limit=1000))
-
-        self.app.icon.notify.assert_not_called()
-
-    def test_no_duplicate_notification(self):
-        """No notification if threshold was already notified."""
-        self.app._check_extra_usage_alerts(self._extra_data(used=820, limit=1000))
-        self.app.icon.notify.reset_mock()
-
-        self.app._check_extra_usage_alerts(self._extra_data(used=850, limit=1000))
-
-        self.app.icon.notify.assert_not_called()
-
-    def test_higher_threshold_triggers_new_notification(self):
-        """Crossing a higher threshold triggers a new notification."""
-        self.app._check_extra_usage_alerts(self._extra_data(used=820, limit=1000))
-        self.app.icon.notify.reset_mock()
-
-        self.app._check_extra_usage_alerts(self._extra_data(used=960, limit=1000))
-
-        self.app.icon.notify.assert_called_once()
-        args = self.app.icon.notify.call_args[0]
-        self.assertIn('96%', args[0])
-
-    def test_re_notification_after_usage_drops(self):
-        """After usage drops (e.g. new billing cycle), thresholds re-trigger."""
-        self.app._check_extra_usage_alerts(self._extra_data(used=820, limit=1000))
-        self.app.icon.notify.reset_mock()
-
-        self.app._check_extra_usage_alerts(self._extra_data(used=100, limit=1000))
-        self.app.icon.notify.assert_not_called()
-
-        self.app._check_extra_usage_alerts(self._extra_data(used=820, limit=1000))
-        self.app.icon.notify.assert_called_once()
-
-    def test_disabled_extra_usage_skipped(self):
-        """No notification when extra usage is disabled."""
-        self.app._check_extra_usage_alerts(self._extra_data(used=950, limit=1000, enabled=False))
-
-        self.app.icon.notify.assert_not_called()
-
-    def test_missing_extra_usage_skipped(self):
-        """No notification when extra_usage is missing from data."""
-        self.app._check_extra_usage_alerts({})
-
-        self.app.icon.notify.assert_not_called()
-
-    def test_zero_limit_skipped(self):
-        """No notification when monthly limit is zero."""
-        self.app._check_extra_usage_alerts(self._extra_data(used=0, limit=0))
-
-        self.app.icon.notify.assert_not_called()
-
-    def test_no_notification_when_thresholds_empty(self):
-        """No notification when thresholds list is empty."""
-        _cleanup(self.app)
-        self.app = _make_app(thresholds=[])
-
-        self.app._check_extra_usage_alerts(self._extra_data(used=950, limit=1000))
-
-        self.app.icon.notify.assert_not_called()
-
-    def test_notification_includes_credit_amounts(self):
-        """Notification message includes formatted credit amounts."""
-        with patch('usage_monitor_for_codex.app.format_credits', side_effect=lambda c, *_: f'${c / 100:.2f}'):
-            self.app._check_extra_usage_alerts(self._extra_data(used=820, limit=1000))
-
-        args = self.app.icon.notify.call_args[0]
-        self.assertIn('$8.20', args[0])
-        self.assertIn('$10.00', args[0])
-
-    def test_called_from_check_threshold_alerts(self):
-        """_check_threshold_alerts delegates to _check_extra_usage_alerts."""
-        data = self._extra_data(used=820, limit=1000)
-        self.app._check_threshold_alerts(data)
-
-        self.app.icon.notify.assert_called_once()
-
-    def test_no_time_aware_logic(self):
-        """Extra usage alerts are not affected by time-aware settings."""
-        with patch('usage_monitor_for_codex.app.ALERT_TIME_AWARE', True):
-            self.app._check_extra_usage_alerts(self._extra_data(used=820, limit=1000))
-
-        self.app.icon.notify.assert_called_once()
-
-
-# ---------------------------------------------------------------------------
-# _check_extra_usage_spent_alerts
-# ---------------------------------------------------------------------------
-
-class TestExtraUsageSpentAlerts(unittest.TestCase):
-    """Tests for _check_extra_usage_spent_alerts() notification logic."""
-
-    def setUp(self):
-        self.app = _make_app(thresholds=[])
-        self._cmd_patch = patch('usage_monitor_for_codex.app.run_event_command')
-        self._cmd_patch.start()
-        self._amounts_patch = patch('usage_monitor_for_codex.app.ALERT_EXTRA_USAGE_SPENT', [50, 100, 150])
-        self._amounts_patch.start()
-
-    def tearDown(self):
-        self._amounts_patch.stop()
-        self._cmd_patch.stop()
-        _cleanup(self.app)
-
-    def _extra_data(self, used: float, limit: float | None = None, enabled: bool = True, decimal_places: int | None = 2) -> dict:
-        extra = {'is_enabled': enabled, 'monthly_limit': limit, 'used_credits': used, 'utilization': None}
-        if decimal_places is not None:
-            extra['decimal_places'] = decimal_places
-        return {'extra_usage': extra}
-
-    def test_notification_when_spend_crosses_amount(self):
-        """Notification fires when uncapped spending crosses a configured amount."""
-        self.app._check_extra_usage_alerts(self._extra_data(used=5000))
-
-        self.app.icon.notify.assert_called_once()
-
-    def test_no_notification_below_lowest_amount(self):
-        """No notification while spending is below every configured amount."""
-        self.app._check_extra_usage_alerts(self._extra_data(used=4999))
-
-        self.app.icon.notify.assert_not_called()
-
-    def test_no_duplicate_notification(self):
-        """No notification if the crossed amount was already notified."""
-        self.app._check_extra_usage_alerts(self._extra_data(used=5000))
-        self.app.icon.notify.reset_mock()
-
-        self.app._check_extra_usage_alerts(self._extra_data(used=6000))
-
-        self.app.icon.notify.assert_not_called()
-
-    def test_higher_amount_triggers_new_notification(self):
-        """Crossing a higher configured amount triggers a new notification."""
-        self.app._check_extra_usage_alerts(self._extra_data(used=5000))
-        self.app.icon.notify.reset_mock()
-
-        self.app._check_extra_usage_alerts(self._extra_data(used=10500))
-
-        self.app.icon.notify.assert_called_once()
-
-    def test_re_notification_after_spend_drops(self):
-        """After spending drops (e.g. new billing cycle), amounts re-trigger."""
-        self.app._check_extra_usage_alerts(self._extra_data(used=10500))
-        self.app.icon.notify.reset_mock()
-
-        self.app._check_extra_usage_alerts(self._extra_data(used=1000))
-        self.app.icon.notify.assert_not_called()
-
-        self.app._check_extra_usage_alerts(self._extra_data(used=5500))
-        self.app.icon.notify.assert_called_once()
-
-    def test_notification_includes_spent_amount(self):
-        """Notification message includes the formatted spent amount."""
-        with patch('usage_monitor_for_codex.app.format_credits', side_effect=lambda c, *_: f'${c / 100:.2f}'):
-            self.app._check_extra_usage_alerts(self._extra_data(used=10631))
-
-        args = self.app.icon.notify.call_args[0]
-        self.assertIn('$106.31', args[0])
-
-    def test_fires_alongside_percentage_alerts_when_capped(self):
-        """With a monthly limit, spend amounts and percentage thresholds alert independently."""
-        _cleanup(self.app)
-        self.app = _make_app(thresholds=[80, 95])
-
-        self.app._check_extra_usage_alerts(self._extra_data(used=8200, limit=10000))
-
-        self.assertEqual(self.app.icon.notify.call_count, 2)
-
-    def test_disabled_extra_usage_skipped(self):
-        """No notification when extra usage is disabled."""
-        self.app._check_extra_usage_alerts(self._extra_data(used=10500, enabled=False))
-
-        self.app.icon.notify.assert_not_called()
-
-    def test_no_notification_when_amounts_empty(self):
-        """No notification when no spend amounts are configured (the default)."""
-        with patch('usage_monitor_for_codex.app.ALERT_EXTRA_USAGE_SPENT', []):
-            self.app._check_extra_usage_alerts(self._extra_data(used=10500))
-
-        self.app.icon.notify.assert_not_called()
-
-    def test_decimal_places_respected(self):
-        """Spending is converted to major units using the API's decimal_places."""
-        self.app._check_extra_usage_alerts(self._extra_data(used=50, decimal_places=0))
-
-        self.app.icon.notify.assert_called_once()
-
-    def test_missing_decimal_places_defaults_to_two(self):
-        """Without decimal_places, used_credits is treated as hundredths."""
-        self.app._check_extra_usage_alerts(self._extra_data(used=5000, decimal_places=None))
-
-        self.app.icon.notify.assert_called_once()
-
-    @patch('usage_monitor_for_codex.app.ON_THRESHOLD_COMMAND', ['notify.bat'])
-    def test_threshold_command_omits_utilization(self):
-        """The spend alert's threshold command carries no utilization percentage."""
-        self.app._first_update_done = True
-        with patch('usage_monitor_for_codex.app.run_event_command') as mock_cmd:
-            self.app._check_extra_usage_alerts(self._extra_data(used=5000))
-
-        env = mock_cmd.call_args[0][1]
-        self.assertEqual(env['USAGE_MONITOR_VARIANT'], 'extra_usage_spent')
-        self.assertNotIn('USAGE_MONITOR_UTILIZATION', env)
-        self.assertEqual(env['USAGE_MONITOR_THRESHOLD'], '50')
-        self.assertIn('USAGE_MONITOR_EXTRA_USED', env)
-        self.assertNotIn('USAGE_MONITOR_EXTRA_LIMIT', env)
 
 
 # ---------------------------------------------------------------------------
@@ -630,7 +387,7 @@ class TestUpdateOrchestration(unittest.TestCase):
 
     def setUp(self):
         self.app = _make_app()
-        self._cmd_patch = patch('usage_monitor_for_codex.app.run_event_command')
+        self._cmd_patch = patch('usage_monitor_for_copilot.app.run_event_command')
         self._cmd_patch.start()
 
     def tearDown(self):
@@ -646,11 +403,11 @@ class TestUpdateOrchestration(unittest.TestCase):
 
         self.assertEqual(self.app._last_response, {})
 
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='tooltip')
+    @patch('usage_monitor_for_copilot.app.create_icon_image')
     def test_success_updates_last_response(self, _icon, _tooltip):
         """Successful update stores response in _last_response."""
-        data = {'five_hour': {'utilization': 42.0}}
+        data = {'chat': {'utilization': 42.0}}
         self.app.cache = MagicMock()
         self.app.cache.update.return_value = UpdateResult(data=data)
 
@@ -658,8 +415,8 @@ class TestUpdateOrchestration(unittest.TestCase):
 
         self.assertEqual(self.app._last_response, data)
 
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_status_image')
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='tooltip')
+    @patch('usage_monitor_for_copilot.app.create_status_image')
     def test_error_updates_last_response(self, _status, _tooltip):
         """Error update stores error response in _last_response."""
         data = {'error': 'server down'}
@@ -670,11 +427,11 @@ class TestUpdateOrchestration(unittest.TestCase):
 
         self.assertEqual(self.app._last_response, data)
 
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='tooltip')
+    @patch('usage_monitor_for_copilot.app.create_icon_image')
     def test_token_refresh_notification(self, _icon, _tooltip):
         """Shows notification when token refresh updated CLI version."""
-        data = {'five_hour': {'utilization': 10.0}}
+        data = {'chat': {'utilization': 10.0}}
         refresh = RefreshResult(success=True, updated=True, old_version='2.1.38', new_version='2.1.69', error='')
         self.app.cache = MagicMock()
         self.app.cache.update.return_value = UpdateResult(data=data, token_refresh=refresh)
@@ -686,11 +443,11 @@ class TestUpdateOrchestration(unittest.TestCase):
         self.assertIn('2.1.38', args[0])
         self.assertIn('2.1.69', args[0])
 
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='tooltip')
+    @patch('usage_monitor_for_copilot.app.create_icon_image')
     def test_no_notification_when_no_cli_update(self, _icon, _tooltip):
         """No notification when token refreshed but no CLI update."""
-        data = {'five_hour': {'utilization': 10.0}}
+        data = {'chat': {'utilization': 10.0}}
         refresh = RefreshResult(success=True, updated=False, old_version='2.1.69', new_version='2.1.69', error='')
         self.app.cache = MagicMock()
         self.app.cache.update.return_value = UpdateResult(data=data, token_refresh=refresh)
@@ -699,12 +456,12 @@ class TestUpdateOrchestration(unittest.TestCase):
 
         self.app.icon.notify.assert_not_called()
 
-    @patch('usage_monitor_for_codex.app.NOTIFY_CODEX_UPDATE', False)
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
+    @patch('usage_monitor_for_copilot.app.NOTIFY_COPILOT_UPDATE', False)
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='tooltip')
+    @patch('usage_monitor_for_copilot.app.create_icon_image')
     def test_update_notification_suppressed_when_disabled(self, _icon, _tooltip):
-        """No notification when notify_codex_update is disabled, even after a CLI update."""
-        data = {'five_hour': {'utilization': 10.0}}
+        """No notification when notify_copilot_update is disabled, even after a CLI update."""
+        data = {'chat': {'utilization': 10.0}}
         refresh = RefreshResult(success=True, updated=True, old_version='2.1.38', new_version='2.1.69', error='')
         self.app.cache = MagicMock()
         self.app.cache.update.return_value = UpdateResult(data=data, token_refresh=refresh)
@@ -713,8 +470,8 @@ class TestUpdateOrchestration(unittest.TestCase):
 
         self.app.icon.notify.assert_not_called()
 
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_status_image')
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='tooltip')
+    @patch('usage_monitor_for_copilot.app.create_status_image')
     def test_error_returns_before_threshold_checks(self, _status, _tooltip):
         """Error response returns early without threshold checks."""
         data = {'error': 'fail'}
@@ -725,32 +482,32 @@ class TestUpdateOrchestration(unittest.TestCase):
             self.app.update()
             mock_check.assert_not_called()
 
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='tooltip')
+    @patch('usage_monitor_for_copilot.app.create_icon_image')
     def test_update_tracks_previous_values(self, _icon, _tooltip):
         """update() stores current pct values for next comparison."""
-        data = {'five_hour': {'utilization': 42.0}, 'seven_day': {'utilization': 15.0}}
+        data = {'chat': {'utilization': 42.0}, 'completions': {'utilization': 15.0}}
         self.app.cache = MagicMock()
         self.app.cache.update.return_value = UpdateResult(data=data)
 
         self.app.update()
 
-        self.assertEqual(self.app._prev_utilization.get('five_hour'), 42.0)
-        self.assertEqual(self.app._prev_utilization.get('seven_day'), 15.0)
+        self.assertEqual(self.app._prev_utilization.get('chat'), 42.0)
+        self.assertEqual(self.app._prev_utilization.get('completions'), 15.0)
 
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_status_image')
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='tooltip')
+    @patch('usage_monitor_for_copilot.app.create_status_image')
     def test_error_does_not_update_previous_values(self, _status, _tooltip):
         """Error response does not change tracked previous values."""
-        self.app._prev_utilization = {'five_hour': 50.0, 'seven_day': 20.0}
+        self.app._prev_utilization = {'chat': 50.0, 'completions': 20.0}
         data = {'error': 'fail'}
         self.app.cache = MagicMock()
         self.app.cache.update.return_value = UpdateResult(data=data)
 
         self.app.update()
 
-        self.assertEqual(self.app._prev_utilization.get('five_hour'), 50.0)
-        self.assertEqual(self.app._prev_utilization.get('seven_day'), 20.0)
+        self.assertEqual(self.app._prev_utilization.get('chat'), 50.0)
+        self.assertEqual(self.app._prev_utilization.get('completions'), 20.0)
 
 
 # ---------------------------------------------------------------------------
@@ -762,19 +519,19 @@ class TestResetNotifications(unittest.TestCase):
 
     def setUp(self):
         self.app = _make_app()
-        self._cmd_patch = patch('usage_monitor_for_codex.app.run_event_command')
+        self._cmd_patch = patch('usage_monitor_for_copilot.app.run_event_command')
         self._cmd_patch.start()
 
     def tearDown(self):
         self._cmd_patch.stop()
         _cleanup(self.app)
 
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
-    def test_5h_reset_notification(self, _icon, _tooltip):
-        """Notification fires when 5h usage drops from >95% with 7d not blocking."""
-        self.app._prev_utilization = {'five_hour': 97.0, 'seven_day': 50.0}
-        data = {'five_hour': {'utilization': 10.0}, 'seven_day': {'utilization': 50.0}}
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='tooltip')
+    @patch('usage_monitor_for_copilot.app.create_icon_image')
+    def test_reset_notification_when_usage_drops(self, _icon, _tooltip):
+        """Notification fires when a field's usage drops from >95% with no other field blocking."""
+        self.app._prev_utilization = {'chat': 97.0, 'completions': 50.0}
+        data = {'chat': {'utilization': 10.0}, 'completions': {'utilization': 50.0}}
         self.app.cache = MagicMock()
         self.app.cache.update.return_value = UpdateResult(data=data)
 
@@ -782,12 +539,12 @@ class TestResetNotifications(unittest.TestCase):
 
         self.app.icon.notify.assert_called_once()
 
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
-    def test_5h_reset_suppressed_when_7d_blocking(self, _icon, _tooltip):
-        """No 5h reset notification when 7d is at 99%+."""
-        self.app._prev_utilization = {'five_hour': 97.0, 'seven_day': 50.0}
-        data = {'five_hour': {'utilization': 10.0}, 'seven_day': {'utilization': 99.5}}
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='tooltip')
+    @patch('usage_monitor_for_copilot.app.create_icon_image')
+    def test_reset_suppressed_when_other_field_blocking(self, _icon, _tooltip):
+        """No reset notification for one field when another is at 99%+."""
+        self.app._prev_utilization = {'chat': 97.0, 'completions': 50.0}
+        data = {'chat': {'utilization': 10.0}, 'completions': {'utilization': 99.5}}
         self.app.cache = MagicMock()
         self.app.cache.update.return_value = UpdateResult(data=data)
 
@@ -796,12 +553,12 @@ class TestResetNotifications(unittest.TestCase):
 
         self.app.icon.notify.assert_not_called()
 
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
-    def test_7d_reset_notification(self, _icon, _tooltip):
-        """Notification fires when 7d usage drops from >98% with 5h not blocking."""
-        self.app._prev_utilization = {'five_hour': 50.0, 'seven_day': 99.0}
-        data = {'five_hour': {'utilization': 50.0}, 'seven_day': {'utilization': 10.0}}
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='tooltip')
+    @patch('usage_monitor_for_copilot.app.create_icon_image')
+    def test_reset_notification_for_second_field(self, _icon, _tooltip):
+        """Notification fires when a second field's usage drops, symmetric to the first."""
+        self.app._prev_utilization = {'chat': 50.0, 'completions': 99.0}
+        data = {'chat': {'utilization': 50.0}, 'completions': {'utilization': 10.0}}
         self.app.cache = MagicMock()
         self.app.cache.update.return_value = UpdateResult(data=data)
 
@@ -809,13 +566,13 @@ class TestResetNotifications(unittest.TestCase):
 
         self.app.icon.notify.assert_called_once()
 
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='tooltip')
+    @patch('usage_monitor_for_copilot.app.create_icon_image')
     def test_two_quotas_resetting_together_notify_once(self, _icon, _tooltip):
         """Two quotas resetting within one polling gap (e.g. a weekly window and its
         model-scoped sibling) produce a single reset notification, not one per field."""
-        self.app._prev_utilization = {'seven_day': 99.0, 'seven_day_fable': 99.0}
-        data = {'seven_day': {'utilization': 1.0}, 'seven_day_fable': {'utilization': 1.0}}
+        self.app._prev_utilization = {'completions': 99.0, 'premium_interactions': 99.0}
+        data = {'completions': {'utilization': 1.0}, 'premium_interactions': {'utilization': 1.0}}
         self.app.cache = MagicMock()
         self.app.cache.update.return_value = UpdateResult(data=data)
 
@@ -823,11 +580,11 @@ class TestResetNotifications(unittest.TestCase):
 
         self.app.icon.notify.assert_called_once()
 
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='tooltip')
+    @patch('usage_monitor_for_copilot.app.create_icon_image')
     def test_no_reset_notification_on_first_update(self, _icon, _tooltip):
         """No reset notification on first update (no previous values)."""
-        data = {'five_hour': {'utilization': 10.0}, 'seven_day': {'utilization': 10.0}}
+        data = {'chat': {'utilization': 10.0}, 'completions': {'utilization': 10.0}}
         self.app.cache = MagicMock()
         self.app.cache.update.return_value = UpdateResult(data=data)
 
@@ -835,45 +592,29 @@ class TestResetNotifications(unittest.TestCase):
 
         self.app.icon.notify.assert_not_called()
 
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='tooltip')
+    @patch('usage_monitor_for_copilot.app.create_icon_image')
     def test_update_ignores_non_dict_entries(self, _icon, _tooltip):
         """Non-dict entries in API response don't affect quota tracking."""
-        self.app._prev_utilization = {'five_hour': 50.0}
+        self.app._prev_utilization = {'chat': 50.0}
         data = {
             'error_code': 'temporary',
             'rate_limited': False,
-            'five_hour': {'utilization': 55.0},
+            'chat': {'utilization': 55.0},
         }
         self.app.cache = MagicMock()
         self.app.cache.update.return_value = UpdateResult(data=data)
 
         self.app.update()
 
-        self.assertEqual(self.app._prev_utilization.get('five_hour'), 55.0)
+        self.assertEqual(self.app._prev_utilization.get('chat'), 55.0)
         self.assertNotIn('error_code', self.app._prev_utilization)
 
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
-    def test_update_excludes_extra_usage_from_quota_tracking(self, _icon, _tooltip):
-        """extra_usage is not tracked as a quota field for resets or fast polling."""
-        data = {
-            'five_hour': {'utilization': 42.0},
-            'extra_usage': {'is_enabled': True, 'monthly_limit': 1000, 'used_credits': 500, 'utilization': 50.0},
-        }
-        self.app.cache = MagicMock()
-        self.app.cache.update.return_value = UpdateResult(data=data)
-
-        self.app.update()
-
-        self.assertIn('five_hour', self.app._prev_utilization)
-        self.assertNotIn('extra_usage', self.app._prev_utilization)
-
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='tooltip')
+    @patch('usage_monitor_for_copilot.app.create_icon_image')
     def test_update_handles_all_null_fields(self, _icon, _tooltip):
         """All-null quota fields produce empty tracking state."""
-        data = {'five_hour': None, 'seven_day': None}
+        data = {'chat': None, 'completions': None}
         self.app.cache = MagicMock()
         self.app.cache.update.return_value = UpdateResult(data=data)
 
@@ -881,12 +622,12 @@ class TestResetNotifications(unittest.TestCase):
 
         self.assertEqual(self.app._prev_utilization, {})
 
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
-    def test_7d_reset_suppressed_when_5h_blocking(self, _icon, _tooltip):
-        """No 7d reset notification when 5h is at 99%+."""
-        self.app._prev_utilization = {'five_hour': 50.0, 'seven_day': 99.0}
-        data = {'five_hour': {'utilization': 99.5}, 'seven_day': {'utilization': 10.0}}
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='tooltip')
+    @patch('usage_monitor_for_copilot.app.create_icon_image')
+    def test_reset_suppressed_when_first_field_blocking(self, _icon, _tooltip):
+        """No reset notification for the second field when the first is at 99%+."""
+        self.app._prev_utilization = {'chat': 50.0, 'completions': 99.0}
+        data = {'chat': {'utilization': 99.5}, 'completions': {'utilization': 10.0}}
         self.app.cache = MagicMock()
         self.app.cache.update.return_value = UpdateResult(data=data)
 
@@ -895,13 +636,13 @@ class TestResetNotifications(unittest.TestCase):
 
         self.app.icon.notify.assert_not_called()
 
-    @patch('usage_monitor_for_codex.app.is_workstation_locked', return_value=True)
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
-    def test_5h_reset_notification_deferred_while_idle(self, _icon, _tooltip, _locked):
+    @patch('usage_monitor_for_copilot.app.is_workstation_locked', return_value=True)
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='tooltip')
+    @patch('usage_monitor_for_copilot.app.create_icon_image')
+    def test_reset_notification_deferred_while_idle(self, _icon, _tooltip, _locked):
         """Reset notification is deferred (not shown) while user is away."""
-        self.app._prev_utilization = {'five_hour': 97.0, 'seven_day': 50.0}
-        data = {'five_hour': {'utilization': 10.0}, 'seven_day': {'utilization': 50.0}}
+        self.app._prev_utilization = {'chat': 97.0, 'completions': 50.0}
+        data = {'chat': {'utilization': 10.0}, 'completions': {'utilization': 50.0}}
         self.app.cache = MagicMock()
         self.app.cache.update.return_value = UpdateResult(data=data)
 
@@ -910,13 +651,13 @@ class TestResetNotifications(unittest.TestCase):
         self.app.icon.notify.assert_not_called()
         self.assertEqual(len(self.app._deferred_notifications), 1)
 
-    @patch('usage_monitor_for_codex.app.is_workstation_locked', return_value=True)
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
+    @patch('usage_monitor_for_copilot.app.is_workstation_locked', return_value=True)
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='tooltip')
+    @patch('usage_monitor_for_copilot.app.create_icon_image')
     def test_deferred_notification_shown_on_flush(self, _icon, _tooltip, _locked):
         """Deferred notifications are shown when flushed."""
-        self.app._prev_utilization = {'five_hour': 97.0, 'seven_day': 50.0}
-        data = {'five_hour': {'utilization': 10.0}, 'seven_day': {'utilization': 50.0}}
+        self.app._prev_utilization = {'chat': 97.0, 'completions': 50.0}
+        data = {'chat': {'utilization': 10.0}, 'completions': {'utilization': 50.0}}
         self.app.cache = MagicMock()
         self.app.cache.update.return_value = UpdateResult(data=data)
 
@@ -928,22 +669,22 @@ class TestResetNotifications(unittest.TestCase):
         self.app.icon.notify.assert_called_once()
         self.assertEqual(len(self.app._deferred_notifications), 0)
 
-    @patch('usage_monitor_for_codex.app.is_workstation_locked', return_value=True)
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
+    @patch('usage_monitor_for_copilot.app.is_workstation_locked', return_value=True)
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='tooltip')
+    @patch('usage_monitor_for_copilot.app.create_icon_image')
     def test_repeated_resets_while_idle_deduplicated(self, _icon, _tooltip, _locked):
         """Multiple reset drops while idle produce only one deferred notification."""
         self.app.cache = MagicMock()
 
         # First reset cycle: 97% -> 10%
-        self.app._prev_utilization = {'five_hour': 97.0, 'seven_day': 50.0}
-        data = {'five_hour': {'utilization': 10.0}, 'seven_day': {'utilization': 50.0}}
+        self.app._prev_utilization = {'chat': 97.0, 'completions': 50.0}
+        data = {'chat': {'utilization': 10.0}, 'completions': {'utilization': 50.0}}
         self.app.cache.update.return_value = UpdateResult(data=data)
         self.app.update()
 
         # Second reset cycle: usage went back up on another device, then reset again
-        self.app._prev_utilization['five_hour'] = 96.0
-        data = {'five_hour': {'utilization': 5.0}, 'seven_day': {'utilization': 50.0}}
+        self.app._prev_utilization['chat'] = 96.0
+        data = {'chat': {'utilization': 5.0}, 'completions': {'utilization': 50.0}}
         self.app.cache.update.return_value = UpdateResult(data=data)
         self.app.update()
 
@@ -953,30 +694,30 @@ class TestResetNotifications(unittest.TestCase):
         self.app._flush_deferred_notifications()
         self.app.icon.notify.assert_called_once()
 
-    @patch('usage_monitor_for_codex.app.ALERT_TIME_AWARE', False)
-    @patch('usage_monitor_for_codex.app.is_workstation_locked', return_value=True)
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
+    @patch('usage_monitor_for_copilot.app.ALERT_TIME_AWARE', False)
+    @patch('usage_monitor_for_copilot.app.is_workstation_locked', return_value=True)
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='tooltip')
+    @patch('usage_monitor_for_copilot.app.create_icon_image')
     def test_threshold_notifications_deferred_and_deduplicated(self, _icon, _tooltip, _locked):
         """Successive threshold crossings while idle keep only the latest notification per variant."""
-        self.app._prev_utilization = {'five_hour': 50.0, 'seven_day': 10.0}
+        self.app._prev_utilization = {'chat': 50.0, 'completions': 10.0}
         self.app.cache = MagicMock()
 
         # Cross 80% threshold
-        data = {'five_hour': {'utilization': 82.0, 'resets_at': '2025-01-15T18:00:00Z'}, 'seven_day': {'utilization': 10.0}}
+        data = {'chat': {'utilization': 82.0, 'resets_at': '2025-01-15T18:00:00Z'}, 'completions': {'utilization': 10.0}}
         self.app.cache.update.return_value = UpdateResult(data=data)
         self.app.update()
 
         # Cross 95% threshold
-        self.app._prev_utilization['five_hour'] = 82.0
-        data = {'five_hour': {'utilization': 96.0, 'resets_at': '2025-01-15T18:00:00Z'}, 'seven_day': {'utilization': 10.0}}
+        self.app._prev_utilization['chat'] = 82.0
+        data = {'chat': {'utilization': 96.0, 'resets_at': '2025-01-15T18:00:00Z'}, 'completions': {'utilization': 10.0}}
         self.app.cache.update.return_value = UpdateResult(data=data)
         self.app.update()
 
         self.app.icon.notify.assert_not_called()
-        # Only one deferred notification for threshold_five_hour (the 96% one)
-        self.assertIn('threshold_five_hour', self.app._deferred_notifications)
-        self.assertIn('96', self.app._deferred_notifications['threshold_five_hour'][0])
+        # Only one deferred notification for threshold_chat (the 96% one)
+        self.assertIn('threshold_chat', self.app._deferred_notifications)
+        self.assertIn('96', self.app._deferred_notifications['threshold_chat'][0])
 
         self.app._flush_deferred_notifications()
         self.app.icon.notify.assert_called_once()
@@ -991,19 +732,19 @@ class TestFastPolling(unittest.TestCase):
 
     def setUp(self):
         self.app = _make_app()
-        self._cmd_patch = patch('usage_monitor_for_codex.app.run_event_command')
+        self._cmd_patch = patch('usage_monitor_for_copilot.app.run_event_command')
         self._cmd_patch.start()
 
     def tearDown(self):
         self._cmd_patch.stop()
         _cleanup(self.app)
 
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='tooltip')
+    @patch('usage_monitor_for_copilot.app.create_icon_image')
     def test_fast_polling_starts_on_usage_increase(self, _icon, _tooltip):
         """Fast polls start when 5h usage is increasing."""
-        self.app._prev_utilization = {'five_hour': 40.0, 'seven_day': 10.0}
-        data = {'five_hour': {'utilization': 45.0}, 'seven_day': {'utilization': 10.0}}
+        self.app._prev_utilization = {'chat': 40.0, 'completions': 10.0}
+        data = {'chat': {'utilization': 45.0}, 'completions': {'utilization': 10.0}}
         self.app.cache = MagicMock()
         self.app.cache.update.return_value = UpdateResult(data=data)
 
@@ -1011,13 +752,13 @@ class TestFastPolling(unittest.TestCase):
 
         self.assertGreater(self.app._fast_polls_remaining, 0)
 
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='tooltip')
+    @patch('usage_monitor_for_copilot.app.create_icon_image')
     def test_fast_polling_decrements(self, _icon, _tooltip):
         """Fast poll counter decrements when usage is stable."""
-        self.app._prev_utilization = {'five_hour': 40.0, 'seven_day': 10.0}
+        self.app._prev_utilization = {'chat': 40.0, 'completions': 10.0}
         self.app._fast_polls_remaining = 2
-        data = {'five_hour': {'utilization': 40.0}, 'seven_day': {'utilization': 10.0}}
+        data = {'chat': {'utilization': 40.0}, 'completions': {'utilization': 10.0}}
         self.app.cache = MagicMock()
         self.app.cache.update.return_value = UpdateResult(data=data)
 
@@ -1025,13 +766,13 @@ class TestFastPolling(unittest.TestCase):
 
         self.assertEqual(self.app._fast_polls_remaining, 1)
 
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='tooltip')
+    @patch('usage_monitor_for_copilot.app.create_icon_image')
     def test_fast_polling_not_below_zero(self, _icon, _tooltip):
         """Fast poll counter does not go below zero."""
-        self.app._prev_utilization = {'five_hour': 40.0, 'seven_day': 10.0}
+        self.app._prev_utilization = {'chat': 40.0, 'completions': 10.0}
         self.app._fast_polls_remaining = 0
-        data = {'five_hour': {'utilization': 40.0}, 'seven_day': {'utilization': 10.0}}
+        data = {'chat': {'utilization': 40.0}, 'completions': {'utilization': 10.0}}
         self.app.cache = MagicMock()
         self.app.cache.update.return_value = UpdateResult(data=data)
 
@@ -1053,18 +794,18 @@ class TestRenderTray(unittest.TestCase):
     def tearDown(self):
         _cleanup(self.app)
 
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='Usage: 42%')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='Usage: 42%')
+    @patch('usage_monitor_for_copilot.app.create_icon_image')
     def test_success_renders_icon(self, mock_icon, _tooltip):
         """Successful data renders usage icon."""
-        self.app._last_response = {'five_hour': {'utilization': 42.0}, 'seven_day': {'utilization': 10.0}}
+        self.app._last_response = {'chat': {'utilization': 42.0}, 'completions': {'utilization': 10.0}}
         self.app._render_tray()
 
-        mock_icon.assert_called_once_with(42.0, 10.0, False, mode_top='utilization', mode_bottom='utilization', time_pct_top=None, time_pct_bottom=None, extra_usage_available=False)
+        mock_icon.assert_called_once_with(42.0, 10.0, False, mode_top='utilization', mode_bottom='utilization', time_pct_top=None, time_pct_bottom=None)
         self.assertEqual(self.app.icon.title, 'Usage: 42%')
 
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='Error')
-    @patch('usage_monitor_for_codex.app.create_status_image')
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='Error')
+    @patch('usage_monitor_for_copilot.app.create_status_image')
     def test_error_renders_exclamation(self, mock_status, _tooltip):
         """Error data renders '!' status icon."""
         self.app._last_response = {'error': 'server down'}
@@ -1072,8 +813,8 @@ class TestRenderTray(unittest.TestCase):
 
         mock_status.assert_called_once_with('!', False)
 
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='Auth Error')
-    @patch('usage_monitor_for_codex.app.create_status_image')
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='Auth Error')
+    @patch('usage_monitor_for_copilot.app.create_status_image')
     def test_auth_error_renders_c_exclamation(self, mock_status, _tooltip):
         """Auth error data renders 'C!' status icon."""
         self.app._last_response = {'error': 'expired', 'auth_error': True}
@@ -1081,205 +822,136 @@ class TestRenderTray(unittest.TestCase):
 
         mock_status.assert_called_once_with('C!', False)
 
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='tooltip')
+    @patch('usage_monitor_for_copilot.app.create_icon_image')
     def test_missing_utilization_defaults_to_zero(self, mock_icon, _tooltip):
         """Missing utilization values default to 0."""
-        self.app._last_response = {'five_hour': {}, 'seven_day': {'utilization': None}}
+        self.app._last_response = {'chat': {}, 'completions': {'utilization': None}}
         self.app._render_tray()
 
-        mock_icon.assert_called_once_with(0, 0, False, mode_top='utilization', mode_bottom='utilization', time_pct_top=None, time_pct_bottom=None, extra_usage_available=False)
+        mock_icon.assert_called_once_with(0, 0, False, mode_top='utilization', mode_bottom='utilization', time_pct_top=None, time_pct_bottom=None)
 
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
-    @patch('usage_monitor_for_codex.app.ICON_FIELDS', ['seven_day_sonnet', 'five_hour'])
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='tooltip')
+    @patch('usage_monitor_for_copilot.app.create_icon_image')
+    @patch('usage_monitor_for_copilot.app.ICON_FIELDS', ['premium_interactions', 'chat'])
     def test_custom_icon_fields(self, mock_icon, _tooltip):
         """Custom icon_fields setting changes which fields are shown in the icon."""
         self.app._last_response = {
-            'five_hour': {'utilization': 30.0},
-            'seven_day_sonnet': {'utilization': 75.0},
+            'chat': {'utilization': 30.0},
+            'premium_interactions': {'utilization': 75.0},
         }
         self.app._render_tray()
 
-        mock_icon.assert_called_once_with(75.0, 30.0, False, mode_top='utilization', mode_bottom='utilization', time_pct_top=None, time_pct_bottom=None, extra_usage_available=False)
+        mock_icon.assert_called_once_with(75.0, 30.0, False, mode_top='utilization', mode_bottom='utilization', time_pct_top=None, time_pct_bottom=None)
 
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
-    @patch('usage_monitor_for_codex.app.ICON_FIELDS', ['unknown_field', 'five_hour'])
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='tooltip')
+    @patch('usage_monitor_for_copilot.app.create_icon_image')
+    @patch('usage_monitor_for_copilot.app.ICON_FIELDS', ['unknown_field', 'chat'])
     def test_icon_fields_missing_from_response_defaults_to_zero(self, mock_icon, _tooltip):
         """Icon field not present in API response defaults to 0%."""
-        self.app._last_response = {'five_hour': {'utilization': 42.0}}
+        self.app._last_response = {'chat': {'utilization': 42.0}}
         self.app._render_tray()
 
-        mock_icon.assert_called_once_with(0, 42.0, False, mode_top='utilization', mode_bottom='utilization', time_pct_top=None, time_pct_bottom=None, extra_usage_available=False)
+        mock_icon.assert_called_once_with(0, 42.0, False, mode_top='utilization', mode_bottom='utilization', time_pct_top=None, time_pct_bottom=None)
 
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
-    @patch('usage_monitor_for_codex.app.ICON_FIELDS', ['seven_day_sonnet', 'five_hour'])
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='tooltip')
+    @patch('usage_monitor_for_copilot.app.create_icon_image')
+    @patch('usage_monitor_for_copilot.app.ICON_FIELDS', ['premium_interactions', 'chat'])
     def test_icon_fields_null_in_response_defaults_to_zero(self, mock_icon, _tooltip):
         """Icon field present but null in API response defaults to 0%."""
-        self.app._last_response = {'five_hour': {'utilization': 42.0}, 'seven_day_sonnet': None}
+        self.app._last_response = {'chat': {'utilization': 42.0}, 'premium_interactions': None}
         self.app._render_tray()
 
-        mock_icon.assert_called_once_with(0, 42.0, False, mode_top='utilization', mode_bottom='utilization', time_pct_top=None, time_pct_bottom=None, extra_usage_available=False)
+        mock_icon.assert_called_once_with(0, 42.0, False, mode_top='utilization', mode_bottom='utilization', time_pct_top=None, time_pct_bottom=None)
 
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
-    @patch('usage_monitor_for_codex.app.ICON_FIELDS', ['limits', 'five_hour'])
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='tooltip')
+    @patch('usage_monitor_for_copilot.app.create_icon_image')
+    @patch('usage_monitor_for_copilot.app.ICON_FIELDS', ['limits', 'chat'])
     def test_icon_field_pointing_to_non_dict_defaults_to_zero(self, mock_icon, _tooltip):
         """An icon field holding a non-dict response value (e.g. the limits array)
         renders as 0% instead of crashing the render path."""
-        self.app._last_response = {'five_hour': {'utilization': 42.0}, 'limits': [{'percent': 12}]}
+        self.app._last_response = {'chat': {'utilization': 42.0}, 'limits': [{'percent': 12}]}
         self.app._render_tray()
 
-        mock_icon.assert_called_once_with(0, 42.0, False, mode_top='utilization', mode_bottom='utilization', time_pct_top=None, time_pct_bottom=None, extra_usage_available=False)
+        mock_icon.assert_called_once_with(0, 42.0, False, mode_top='utilization', mode_bottom='utilization', time_pct_top=None, time_pct_bottom=None)
 
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
-    @patch('usage_monitor_for_codex.app.elapsed_pct', return_value=40.0)
-    @patch('usage_monitor_for_codex.app.ICON_FIELDS', ['five_hour:overage', 'seven_day'])
-    def test_overage_mode_passes_time_pct(self, mock_elapsed, mock_icon, _tooltip):
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='tooltip')
+    @patch('usage_monitor_for_copilot.app.create_icon_image')
+    @patch('usage_monitor_for_copilot.app.elapsed_pct', return_value=40.0)
+    # Real Copilot field names carry no period - field_period would return
+    # None and short-circuit time_pct to None before elapsed_pct is ever
+    # called, making this test vacuous.  Patched truthy (matches
+    # TestTimeAwareAlerts.setUp's rationale) so this still exercises the
+    # shared time-pct plumbing that real period-bearing fields would use.
+    @patch('usage_monitor_for_copilot.app.field_period', return_value=18000)
+    @patch('usage_monitor_for_copilot.app.ICON_FIELDS', ['chat:overage', 'completions'])
+    def test_overage_mode_passes_time_pct(self, mock_period, mock_elapsed, mock_icon, _tooltip):
         """Elapsed time pct is passed for both bars regardless of display mode."""
         self.app._last_response = {
-            'five_hour': {'utilization': 60.0, 'resets_at': '2025-01-15T18:00:00Z'},
-            'seven_day': {'utilization': 20.0},
+            'chat': {'utilization': 60.0, 'resets_at': '2025-01-15T18:00:00Z'},
+            'completions': {'utilization': 20.0},
         }
         self.app._render_tray()
 
-        mock_icon.assert_called_once_with(60.0, 20.0, False, mode_top='overage', mode_bottom='utilization', time_pct_top=40.0, time_pct_bottom=40.0, extra_usage_available=False)
+        mock_icon.assert_called_once_with(60.0, 20.0, False, mode_top='overage', mode_bottom='utilization', time_pct_top=40.0, time_pct_bottom=40.0)
 
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
-    @patch('usage_monitor_for_codex.app.elapsed_pct', return_value=50.0)
-    @patch('usage_monitor_for_codex.app.ICON_FIELDS', ['five_hour:overage', 'seven_day:overage'])
-    def test_both_overage_mode_passes_both_time_pcts(self, mock_elapsed, mock_icon, _tooltip):
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='tooltip')
+    @patch('usage_monitor_for_copilot.app.create_icon_image')
+    @patch('usage_monitor_for_copilot.app.elapsed_pct', return_value=50.0)
+    @patch('usage_monitor_for_copilot.app.field_period', return_value=18000)
+    @patch('usage_monitor_for_copilot.app.ICON_FIELDS', ['chat:overage', 'completions:overage'])
+    def test_both_overage_mode_passes_both_time_pcts(self, mock_period, mock_elapsed, mock_icon, _tooltip):
         """Both bars in overage mode pass elapsed time pct for both top and bottom."""
         self.app._last_response = {
-            'five_hour': {'utilization': 30.0, 'resets_at': '2025-01-15T18:00:00Z'},
-            'seven_day': {'utilization': 10.0, 'resets_at': '2025-01-20T00:00:00Z'},
+            'chat': {'utilization': 30.0, 'resets_at': '2025-01-15T18:00:00Z'},
+            'completions': {'utilization': 10.0, 'resets_at': '2025-01-20T00:00:00Z'},
         }
         self.app._render_tray()
 
-        mock_icon.assert_called_once_with(30.0, 10.0, False, mode_top='overage', mode_bottom='overage', time_pct_top=50.0, time_pct_bottom=50.0, extra_usage_available=False)
+        mock_icon.assert_called_once_with(30.0, 10.0, False, mode_top='overage', mode_bottom='overage', time_pct_top=50.0, time_pct_bottom=50.0)
 
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
-    @patch('usage_monitor_for_codex.app.elapsed_pct', return_value=35.0)
-    def test_utilization_mode_passes_time_pct(self, mock_elapsed, mock_icon, _tooltip):
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='tooltip')
+    @patch('usage_monitor_for_copilot.app.create_icon_image')
+    @patch('usage_monitor_for_copilot.app.elapsed_pct', return_value=35.0)
+    @patch('usage_monitor_for_copilot.app.field_period', return_value=18000)
+    def test_utilization_mode_passes_time_pct(self, mock_period, mock_elapsed, mock_icon, _tooltip):
         """Default utilization mode passes elapsed time pct so the bars can draw the reset-time marker."""
         self.app._last_response = {
-            'five_hour': {'utilization': 42.0, 'resets_at': '2025-01-15T18:00:00Z'},
-            'seven_day': {'utilization': 10.0, 'resets_at': '2025-01-20T00:00:00Z'},
+            'chat': {'utilization': 42.0, 'resets_at': '2025-01-15T18:00:00Z'},
+            'completions': {'utilization': 10.0, 'resets_at': '2025-01-20T00:00:00Z'},
         }
         self.app._render_tray()
 
-        mock_icon.assert_called_once_with(42.0, 10.0, False, mode_top='utilization', mode_bottom='utilization', time_pct_top=35.0, time_pct_bottom=35.0, extra_usage_available=False)
+        mock_icon.assert_called_once_with(42.0, 10.0, False, mode_top='utilization', mode_bottom='utilization', time_pct_top=35.0, time_pct_bottom=35.0)
 
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
-    @patch('usage_monitor_for_codex.app.ICON_FIELDS', ['five_hour:overage', 'seven_day'])
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='tooltip')
+    @patch('usage_monitor_for_copilot.app.create_icon_image')
+    @patch('usage_monitor_for_copilot.app.ICON_FIELDS', ['chat:overage', 'completions'])
     def test_overage_mode_field_parsed_as_dict_key(self, mock_icon, _tooltip):
         """Field name in overage mode is correctly stripped of mode suffix for data lookup."""
         self.app._last_response = {
-            'five_hour': {'utilization': 55.0, 'resets_at': '2025-01-15T18:00:00Z'},
-            'seven_day': {'utilization': 25.0},
+            'chat': {'utilization': 55.0, 'resets_at': '2025-01-15T18:00:00Z'},
+            'completions': {'utilization': 25.0},
         }
         self.app._render_tray()
 
-        # pct_top should be 55.0 (not 0), confirming 'five_hour' was used as dict key not 'five_hour:overage'
+        # pct_top should be 55.0 (not 0), confirming 'chat' was used as dict key not 'chat:overage'
         call_args = mock_icon.call_args
         self.assertEqual(call_args[0][0], 55.0)
 
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
-    def test_extra_usage_available_true_when_credits_remain(self, mock_icon, _tooltip):
-        """extra_usage_available is True when extra-usage is enabled and credits are not exhausted."""
-        self.app._last_response = {
-            'five_hour': {'utilization': 100.0},
-            'seven_day': {'utilization': 80.0},
-            'extra_usage': {'is_enabled': True, 'monthly_limit': 1000, 'used_credits': 250.0},
-        }
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='tooltip')
+    @patch('usage_monitor_for_copilot.app.create_icon_image')
+    @patch('usage_monitor_for_copilot.app.ICON_FIELDS', ['premium_interactions'])
+    def test_single_configured_field_leaves_bottom_bar_empty(self, mock_icon, _tooltip):
+        """With only one field configured (the Copilot default), the bottom bar
+        gets no field rather than repeating the top one - there is no
+        Claude/Codex five_hour/seven_day pair to fall back to."""
+        self.app._last_response = {'premium_interactions': {'utilization': 65.0}}
         self.app._render_tray()
 
-        self.assertTrue(mock_icon.call_args.kwargs['extra_usage_available'])
-
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
-    def test_extra_usage_available_false_when_disabled(self, mock_icon, _tooltip):
-        """extra_usage_available is False when the account has not enabled extra usage."""
-        self.app._last_response = {
-            'five_hour': {'utilization': 100.0},
-            'extra_usage': {'is_enabled': False, 'monthly_limit': 0, 'used_credits': 0},
-        }
-        self.app._render_tray()
-
-        self.assertFalse(mock_icon.call_args.kwargs['extra_usage_available'])
-
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
-    def test_extra_usage_available_false_when_credits_exhausted(self, mock_icon, _tooltip):
-        """extra_usage_available is False when all credits have been spent."""
-        self.app._last_response = {
-            'five_hour': {'utilization': 100.0},
-            'extra_usage': {'is_enabled': True, 'monthly_limit': 1000, 'used_credits': 1000.0},
-        }
-        self.app._render_tray()
-
-        self.assertFalse(mock_icon.call_args.kwargs['extra_usage_available'])
-
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
-    def test_extra_usage_available_false_when_no_extra_usage_key(self, mock_icon, _tooltip):
-        """extra_usage_available is False when the API response omits the extra_usage object entirely."""
-        self.app._last_response = {'five_hour': {'utilization': 100.0}}
-        self.app._render_tray()
-
-        self.assertFalse(mock_icon.call_args.kwargs['extra_usage_available'])
-
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
-    def test_extra_usage_available_false_when_extra_usage_null(self, mock_icon, _tooltip):
-        """extra_usage_available is False when the extra_usage field is explicitly null."""
-        self.app._last_response = {'five_hour': {'utilization': 100.0}, 'extra_usage': None}
-        self.app._render_tray()
-
-        self.assertFalse(mock_icon.call_args.kwargs['extra_usage_available'])
-
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
-    def test_extra_usage_available_true_when_uncapped(self, mock_icon, _tooltip):
-        """extra_usage_available is True for enabled extra usage with a null monthly_limit (uncapped)."""
-        self.app._last_response = {
-            'five_hour': {'utilization': 100.0},
-            'extra_usage': {'is_enabled': True, 'monthly_limit': None, 'used_credits': 10631.0},
-        }
-        self.app._render_tray()
-
-        self.assertTrue(mock_icon.call_args.kwargs['extra_usage_available'])
-
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
-    def test_extra_usage_available_true_when_limit_missing(self, mock_icon, _tooltip):
-        """extra_usage_available is True for enabled extra usage without a monthly_limit key."""
-        self.app._last_response = {
-            'five_hour': {'utilization': 100.0},
-            'extra_usage': {'is_enabled': True, 'used_credits': 500.0},
-        }
-        self.app._render_tray()
-
-        self.assertTrue(mock_icon.call_args.kwargs['extra_usage_available'])
-
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
-    def test_extra_usage_available_false_when_uncapped_but_disabled(self, mock_icon, _tooltip):
-        """A null monthly_limit does not make disabled extra usage available."""
-        self.app._last_response = {
-            'five_hour': {'utilization': 100.0},
-            'extra_usage': {'is_enabled': False, 'monthly_limit': None, 'used_credits': 0},
-        }
-        self.app._render_tray()
-
-        self.assertFalse(mock_icon.call_args.kwargs['extra_usage_available'])
+        mock_icon.assert_called_once_with(
+            65.0, 0, False, mode_top='utilization', mode_bottom='utilization', time_pct_top=None, time_pct_bottom=None,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -1295,30 +967,30 @@ class TestOnThemeChanged(unittest.TestCase):
     def tearDown(self):
         _cleanup(self.app)
 
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
-    @patch('usage_monitor_for_codex.app.taskbar_uses_light_theme', return_value=True)
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='tooltip')
+    @patch('usage_monitor_for_copilot.app.create_icon_image')
+    @patch('usage_monitor_for_copilot.app.taskbar_uses_light_theme', return_value=True)
     def test_theme_change_re_renders(self, _theme, mock_icon, _tooltip):
         """Theme change re-renders the tray icon."""
         self.app._light_taskbar = False
-        self.app._last_response = {'five_hour': {'utilization': 50.0}, 'seven_day': {'utilization': 20.0}}
+        self.app._last_response = {'chat': {'utilization': 50.0}, 'completions': {'utilization': 20.0}}
 
         self.app._on_theme_changed()
 
         self.assertTrue(self.app._light_taskbar)
-        mock_icon.assert_called_once_with(50.0, 20.0, True, mode_top='utilization', mode_bottom='utilization', time_pct_top=None, time_pct_bottom=None, extra_usage_available=False)
+        mock_icon.assert_called_once_with(50.0, 20.0, True, mode_top='utilization', mode_bottom='utilization', time_pct_top=None, time_pct_bottom=None)
 
-    @patch('usage_monitor_for_codex.app.taskbar_uses_light_theme', return_value=False)
+    @patch('usage_monitor_for_copilot.app.taskbar_uses_light_theme', return_value=False)
     def test_same_theme_no_render(self, _theme):
         """No re-render when theme hasn't changed."""
         self.app._light_taskbar = False
-        self.app._last_response = {'five_hour': {'utilization': 50.0}}
+        self.app._last_response = {'chat': {'utilization': 50.0}}
 
         with patch.object(self.app, '_render_tray') as mock_render:
             self.app._on_theme_changed()
             mock_render.assert_not_called()
 
-    @patch('usage_monitor_for_codex.app.taskbar_uses_light_theme', return_value=True)
+    @patch('usage_monitor_for_copilot.app.taskbar_uses_light_theme', return_value=True)
     def test_theme_change_without_data_no_render(self, _theme):
         """Theme change without any data does not render."""
         self.app._light_taskbar = False
@@ -1344,13 +1016,13 @@ class TestCalculatePollInterval(unittest.TestCase):
 
     def test_normal_interval(self):
         """Normal state returns POLL_INTERVAL."""
-        self.app._last_response = {'five_hour': {'utilization': 50.0}}
+        self.app._last_response = {'chat': {'utilization': 50.0}}
         interval = self.app._calculate_poll_interval()
         self.assertEqual(interval, 180)
 
     def test_fast_polling_interval(self):
         """When fast polling is active, returns POLL_FAST."""
-        self.app._last_response = {'five_hour': {'utilization': 50.0}}
+        self.app._last_response = {'chat': {'utilization': 50.0}}
         self.app._fast_polls_remaining = 3
         interval = self.app._calculate_poll_interval()
         self.assertEqual(interval, 120)
@@ -1409,7 +1081,7 @@ class TestCalculatePollInterval(unittest.TestCase):
 
     def test_away_uses_idle_interval(self):
         """While the user is away, polling slows to IDLE_INTERVAL instead of stopping."""
-        self.app._last_response = {'five_hour': {'utilization': 50.0}}
+        self.app._last_response = {'chat': {'utilization': 50.0}}
         with patch.object(self.app, '_polling_throttled', return_value=True):
             interval = self.app._calculate_poll_interval()
 
@@ -1435,7 +1107,7 @@ class TestCalculatePollInterval(unittest.TestCase):
 
     def test_away_with_overdue_reset_keeps_normal_interval(self):
         """An unconfirmed reset keeps the normal cadence even while away."""
-        self.app._last_response = {'five_hour': {'utilization': 50.0}}
+        self.app._last_response = {'chat': {'utilization': 50.0}}
         with patch.object(self.app, '_polling_throttled', return_value=True), \
              patch.object(self.app, '_reset_overdue', return_value=True):
             interval = self.app._calculate_poll_interval()
@@ -1444,7 +1116,7 @@ class TestCalculatePollInterval(unittest.TestCase):
 
     def test_away_still_aligns_to_reset(self):
         """Reset alignment applies on the away cadence, so a reset is caught on time."""
-        self.app._last_response = {'five_hour': {'utilization': 50.0}}
+        self.app._last_response = {'chat': {'utilization': 50.0}}
         with patch.object(self.app, '_polling_throttled', return_value=True), \
              patch.object(self.app, '_seconds_until_next_reset', return_value=600.0):
             interval = self.app._calculate_poll_interval()
@@ -1474,10 +1146,10 @@ class TestSecondsUntilNextReset(unittest.TestCase):
 
     def test_no_resets_at_returns_none(self):
         """Entry without resets_at returns None."""
-        self.app._last_response = {'five_hour': {'utilization': 50.0}}
+        self.app._last_response = {'chat': {'utilization': 50.0}}
         self.assertIsNone(self.app._seconds_until_next_reset())
 
-    @patch('usage_monitor_for_codex.app.datetime')
+    @patch('usage_monitor_for_copilot.app.datetime')
     def test_returns_seconds_to_nearest_reset(self, mock_dt):
         """Returns seconds to the nearest future reset."""
         now = datetime(2025, 1, 15, 12, 0, 0, tzinfo=timezone.utc)
@@ -1485,15 +1157,15 @@ class TestSecondsUntilNextReset(unittest.TestCase):
         mock_dt.fromisoformat = datetime.fromisoformat
 
         self.app._last_response = {
-            'five_hour': {'utilization': 50.0, 'resets_at': '2025-01-15T12:30:00+00:00'},
-            'seven_day': {'utilization': 30.0, 'resets_at': '2025-01-15T14:00:00+00:00'},
+            'chat': {'utilization': 50.0, 'resets_at': '2025-01-15T12:30:00+00:00'},
+            'completions': {'utilization': 30.0, 'resets_at': '2025-01-15T14:00:00+00:00'},
         }
 
         result = self.app._seconds_until_next_reset()
         assert result is not None
         self.assertAlmostEqual(result, 1800.0, places=0)  # 30 minutes
 
-    @patch('usage_monitor_for_codex.app.datetime')
+    @patch('usage_monitor_for_copilot.app.datetime')
     def test_past_reset_ignored(self, mock_dt):
         """Past reset times are ignored."""
         now = datetime(2025, 1, 15, 12, 0, 0, tzinfo=timezone.utc)
@@ -1501,7 +1173,7 @@ class TestSecondsUntilNextReset(unittest.TestCase):
         mock_dt.fromisoformat = datetime.fromisoformat
 
         self.app._last_response = {
-            'five_hour': {'utilization': 50.0, 'resets_at': '2025-01-15T11:00:00+00:00'},
+            'chat': {'utilization': 50.0, 'resets_at': '2025-01-15T11:00:00+00:00'},
         }
 
         self.assertIsNone(self.app._seconds_until_next_reset())
@@ -1522,7 +1194,7 @@ class TestResetAlignment(unittest.TestCase):
 
     def test_imminent_reset_aligns_poll(self):
         """When reset is imminent, interval aligns to reset time."""
-        self.app._last_response = {'five_hour': {'utilization': 50.0}}
+        self.app._last_response = {'chat': {'utilization': 50.0}}
         with patch.object(self.app, '_seconds_until_next_reset', return_value=160.0):
             interval = self.app._calculate_poll_interval()
 
@@ -1532,7 +1204,7 @@ class TestResetAlignment(unittest.TestCase):
 
     def test_distant_reset_no_alignment(self):
         """When reset is far away, normal interval is used."""
-        self.app._last_response = {'five_hour': {'utilization': 50.0}}
+        self.app._last_response = {'chat': {'utilization': 50.0}}
         with patch.object(self.app, '_seconds_until_next_reset', return_value=500.0):
             interval = self.app._calculate_poll_interval()
 
@@ -1541,7 +1213,7 @@ class TestResetAlignment(unittest.TestCase):
 
     def test_reset_alignment_sets_fast_polls(self):
         """Reset alignment sets fast_polls_remaining for post-reset follow-up."""
-        self.app._last_response = {'five_hour': {'utilization': 50.0}}
+        self.app._last_response = {'chat': {'utilization': 50.0}}
         self.app._fast_polls_remaining = 0
         with patch.object(self.app, '_seconds_until_next_reset', return_value=100.0):
             self.app._calculate_poll_interval()
@@ -1639,13 +1311,13 @@ class TestResetAlignedPollTarget(unittest.TestCase):
     def tearDown(self):
         _cleanup(self.app)
 
-    @patch('usage_monitor_for_codex.app.time.time', return_value=1000.0)
+    @patch('usage_monitor_for_copilot.app.time.time', return_value=1000.0)
     def test_lands_just_after_reset(self, _mock_time):
         """Well past the cooldown, the poll lands RESET_BUFFER after the reset."""
         self.app.cache.last_success_time = 1000.0 - 300  # last fetch 300s ago
         self.assertEqual(self.app._reset_aligned_poll_target(60.0), 1000.0 + 60.0 + RESET_BUFFER)
 
-    @patch('usage_monitor_for_codex.app.time.time', return_value=1000.0)
+    @patch('usage_monitor_for_copilot.app.time.time', return_value=1000.0)
     def test_clamped_to_cooldown(self, _mock_time):
         """Inside the cooldown window the poll is delayed to last_success + POLL_FAST."""
         last = 1000.0 - 30  # last fetch 30s ago
@@ -1653,7 +1325,7 @@ class TestResetAlignedPollTarget(unittest.TestCase):
         # reset+buffer (1025) is earlier than the cooldown floor (last + POLL_FAST)
         self.assertEqual(self.app._reset_aligned_poll_target(20.0), last + POLL_FAST)
 
-    @patch('usage_monitor_for_codex.app.time.time', return_value=1000.0)
+    @patch('usage_monitor_for_copilot.app.time.time', return_value=1000.0)
     def test_no_last_success_uses_reset_only(self, _mock_time):
         """Without a prior fetch only reset + buffer applies."""
         self.app.cache.last_success_time = None
@@ -1675,32 +1347,32 @@ class TestSafePollTarget(unittest.TestCase):
     def tearDown(self):
         _cleanup(self.app)
 
-    @patch('usage_monitor_for_codex.app.time.time', return_value=1000.0)
+    @patch('usage_monitor_for_copilot.app.time.time', return_value=1000.0)
     def test_no_reset_keeps_target(self, _mock_time):
         """Without a known reset any target is fine."""
         with patch.object(self.app, '_seconds_until_next_reset', return_value=None):
             self.assertEqual(self.app._safe_poll_target(1500.0), 1500.0)
 
-    @patch('usage_monitor_for_codex.app.time.time', return_value=1000.0)
+    @patch('usage_monitor_for_copilot.app.time.time', return_value=1000.0)
     def test_target_well_before_reset_kept(self, _mock_time):
         """A target far enough ahead of the reset is left alone."""
         with patch.object(self.app, '_seconds_until_next_reset', return_value=600.0):
             self.assertEqual(self.app._safe_poll_target(1200.0), 1200.0)
 
-    @patch('usage_monitor_for_codex.app.time.time', return_value=1000.0)
+    @patch('usage_monitor_for_copilot.app.time.time', return_value=1000.0)
     def test_target_in_danger_window_moved_to_aligned_slot(self, _mock_time):
         """A target inside the last POLL_FAST - RESET_BUFFER seconds is deferred past the reset."""
         # Reset at 1600; the danger window starts at 1600 - 115 = 1485.
         with patch.object(self.app, '_seconds_until_next_reset', return_value=600.0):
             self.assertEqual(self.app._safe_poll_target(1500.0), 1600.0 + RESET_BUFFER)
 
-    @patch('usage_monitor_for_codex.app.time.time', return_value=1000.0)
+    @patch('usage_monitor_for_copilot.app.time.time', return_value=1000.0)
     def test_target_past_aligned_slot_pulled_back(self, _mock_time):
         """A target beyond the reset-aligned slot would delay the confirming poll."""
         with patch.object(self.app, '_seconds_until_next_reset', return_value=600.0):
             self.assertEqual(self.app._safe_poll_target(2000.0), 1600.0 + RESET_BUFFER)
 
-    @patch('usage_monitor_for_codex.app.time.time', return_value=1000.0)
+    @patch('usage_monitor_for_copilot.app.time.time', return_value=1000.0)
     def test_aligned_slot_respects_cooldown(self, _mock_time):
         """The fallback slot still honors the cache cooldown after the last fetch."""
         self.app.cache.last_success_time = 990.0
@@ -1729,21 +1401,21 @@ class TestShouldRefreshUsage(unittest.TestCase):
         with patch.object(self.app, '_seconds_until_next_reset', return_value=30.0):
             self.assertTrue(self.app._should_refresh_usage())
 
-    @patch('usage_monitor_for_codex.app.time.time', return_value=1000.0)
+    @patch('usage_monitor_for_copilot.app.time.time', return_value=1000.0)
     def test_fresh_data_not_refreshed(self, _mock_time):
         """Data younger than the cooldown is not refreshed."""
         self.app.cache.last_success_time = 1000.0 - (POLL_FAST - 10)
         with patch.object(self.app, '_seconds_until_next_reset', return_value=None):
             self.assertFalse(self.app._should_refresh_usage())
 
-    @patch('usage_monitor_for_codex.app.time.time', return_value=1000.0)
+    @patch('usage_monitor_for_copilot.app.time.time', return_value=1000.0)
     def test_stale_data_refreshed_without_imminent_reset(self, _mock_time):
         """Stale data refreshes when no reset is imminent."""
         self.app.cache.last_success_time = 1000.0 - (POLL_FAST + 10)
         with patch.object(self.app, '_seconds_until_next_reset', return_value=300.0):
             self.assertTrue(self.app._should_refresh_usage())
 
-    @patch('usage_monitor_for_codex.app.time.time', return_value=1000.0)
+    @patch('usage_monitor_for_copilot.app.time.time', return_value=1000.0)
     def test_stale_data_deferred_when_reset_imminent(self, _mock_time):
         """Stale data is not refreshed when a reset is within the cooldown."""
         self.app.cache.last_success_time = 1000.0 - (POLL_FAST + 10)
@@ -1767,7 +1439,7 @@ class TestMenuActions(unittest.TestCase):
     def test_on_show_popup_guards_against_double_open(self):
         """on_show_popup() does nothing when popup is already open."""
         self.app._popup_open = True
-        with patch('usage_monitor_for_codex.app.threading.Thread') as mock_thread:
+        with patch('usage_monitor_for_copilot.app.threading.Thread') as mock_thread:
             self.app.on_show_popup()
             mock_thread.assert_not_called()
 
@@ -1791,48 +1463,48 @@ class TestIsUserAway(unittest.TestCase):
     def tearDown(self):
         _cleanup(self.app)
 
-    @patch('usage_monitor_for_codex.app.is_workstation_locked', return_value=True)
+    @patch('usage_monitor_for_copilot.app.is_workstation_locked', return_value=True)
     def test_locked_is_away(self, _locked):
         """User is away when workstation is locked."""
         self.assertTrue(self.app._is_user_away())
 
-    @patch('usage_monitor_for_codex.app.is_workstation_locked', return_value=False)
-    @patch('usage_monitor_for_codex.app.get_idle_seconds', return_value=400.0)
-    @patch('usage_monitor_for_codex.app.IDLE_PAUSE', 300)
+    @patch('usage_monitor_for_copilot.app.is_workstation_locked', return_value=False)
+    @patch('usage_monitor_for_copilot.app.get_idle_seconds', return_value=400.0)
+    @patch('usage_monitor_for_copilot.app.IDLE_PAUSE', 300)
     def test_idle_over_threshold_is_away(self, _idle, _locked):
         """User is away when idle time exceeds IDLE_PAUSE."""
         self.assertTrue(self.app._is_user_away())
 
-    @patch('usage_monitor_for_codex.app.is_workstation_locked', return_value=False)
-    @patch('usage_monitor_for_codex.app.get_idle_seconds', return_value=200.0)
-    @patch('usage_monitor_for_codex.app.IDLE_PAUSE', 300)
+    @patch('usage_monitor_for_copilot.app.is_workstation_locked', return_value=False)
+    @patch('usage_monitor_for_copilot.app.get_idle_seconds', return_value=200.0)
+    @patch('usage_monitor_for_copilot.app.IDLE_PAUSE', 300)
     def test_idle_under_threshold_not_away(self, _idle, _locked):
         """User is not away when idle time is below IDLE_PAUSE."""
         self.assertFalse(self.app._is_user_away())
 
-    @patch('usage_monitor_for_codex.app.is_workstation_locked', return_value=False)
-    @patch('usage_monitor_for_codex.app.get_idle_seconds', return_value=300.0)
-    @patch('usage_monitor_for_codex.app.IDLE_PAUSE', 300)
+    @patch('usage_monitor_for_copilot.app.is_workstation_locked', return_value=False)
+    @patch('usage_monitor_for_copilot.app.get_idle_seconds', return_value=300.0)
+    @patch('usage_monitor_for_copilot.app.IDLE_PAUSE', 300)
     def test_idle_exactly_at_threshold_is_away(self, _idle, _locked):
         """User is away when idle time equals IDLE_PAUSE exactly."""
         self.assertTrue(self.app._is_user_away())
 
-    @patch('usage_monitor_for_codex.app.is_workstation_locked', return_value=False)
-    @patch('usage_monitor_for_codex.app.get_idle_seconds', return_value=9999.0)
-    @patch('usage_monitor_for_codex.app.IDLE_PAUSE', 0)
+    @patch('usage_monitor_for_copilot.app.is_workstation_locked', return_value=False)
+    @patch('usage_monitor_for_copilot.app.get_idle_seconds', return_value=9999.0)
+    @patch('usage_monitor_for_copilot.app.IDLE_PAUSE', 0)
     def test_idle_disabled_with_zero(self, _idle, _locked):
         """Idle detection disabled when IDLE_PAUSE is 0."""
         self.assertFalse(self.app._is_user_away())
 
-    @patch('usage_monitor_for_codex.app.is_workstation_locked', return_value=True)
-    @patch('usage_monitor_for_codex.app.IDLE_PAUSE', 0)
+    @patch('usage_monitor_for_copilot.app.is_workstation_locked', return_value=True)
+    @patch('usage_monitor_for_copilot.app.IDLE_PAUSE', 0)
     def test_locked_detected_even_when_idle_disabled(self, _locked):
         """Lock detection works even when idle detection is disabled."""
         self.assertTrue(self.app._is_user_away())
 
-    @patch('usage_monitor_for_codex.app.is_workstation_locked', return_value=False)
-    @patch('usage_monitor_for_codex.app.get_idle_seconds', return_value=0.0)
-    @patch('usage_monitor_for_codex.app.IDLE_PAUSE', 300)
+    @patch('usage_monitor_for_copilot.app.is_workstation_locked', return_value=False)
+    @patch('usage_monitor_for_copilot.app.get_idle_seconds', return_value=0.0)
+    @patch('usage_monitor_for_copilot.app.IDLE_PAUSE', 300)
     def test_active_user_not_away(self, _idle, _locked):
         """User is not away when active (0 idle seconds)."""
         self.assertFalse(self.app._is_user_away())
@@ -1866,20 +1538,20 @@ class TestPollingThrottled(unittest.TestCase):
         with patch.object(self.app, '_is_user_away', return_value=True):
             self.assertFalse(self.app._polling_throttled())
 
-    @patch('usage_monitor_for_codex.app.is_workstation_locked', return_value=True)
+    @patch('usage_monitor_for_copilot.app.is_workstation_locked', return_value=True)
     def test_open_popup_behind_lock_screen_throttled(self, _locked):
         """A locked screen hides the popup, so the away cadence applies."""
         self.app._popup_open = True
         self.assertTrue(self.app._polling_throttled())
 
-    @patch('usage_monitor_for_codex.app.is_screensaver_running', return_value=True)
+    @patch('usage_monitor_for_copilot.app.is_screensaver_running', return_value=True)
     def test_open_popup_behind_screensaver_throttled(self, _screensaver):
         """A running screensaver covers the popup, so the away cadence applies."""
         self.app._popup_open = True
         with patch.object(self.app, '_is_user_away', return_value=True):
             self.assertTrue(self.app._polling_throttled())
 
-    @patch('usage_monitor_for_codex.app.is_screensaver_running', return_value=True)
+    @patch('usage_monitor_for_copilot.app.is_screensaver_running', return_value=True)
     def test_screensaver_alone_does_not_throttle_present_user(self, _screensaver):
         """A screensaver without an open popup still follows the idle decision."""
         self.assertFalse(self.app._polling_throttled())
@@ -1908,43 +1580,43 @@ class TestResetOverdue(unittest.TestCase):
         self.app._last_response = {}
         self.assertFalse(self.app._reset_overdue())
 
-    @patch('usage_monitor_for_codex.app.datetime')
+    @patch('usage_monitor_for_copilot.app.datetime')
     def test_future_reset_not_overdue(self, mock_dt):
         """A reset still ahead is not overdue."""
         self._freeze(mock_dt)
-        self.app._last_response = {'five_hour': {'utilization': 90.0, 'resets_at': '2025-01-15T12:30:00+00:00'}}
+        self.app._last_response = {'chat': {'utilization': 90.0, 'resets_at': '2025-01-15T12:30:00+00:00'}}
         self.assertFalse(self.app._reset_overdue())
 
-    @patch('usage_monitor_for_codex.app.datetime')
+    @patch('usage_monitor_for_copilot.app.datetime')
     def test_past_reset_is_overdue(self, mock_dt):
         """A reset timestamp still in the past means the API has not reported it yet."""
         self._freeze(mock_dt)
-        self.app._last_response = {'five_hour': {'utilization': 90.0, 'resets_at': '2025-01-15T11:30:00+00:00'}}
+        self.app._last_response = {'chat': {'utilization': 90.0, 'resets_at': '2025-01-15T11:30:00+00:00'}}
         self.assertTrue(self.app._reset_overdue())
 
-    @patch('usage_monitor_for_codex.app.datetime')
+    @patch('usage_monitor_for_copilot.app.datetime')
     def test_one_overdue_among_several(self, mock_dt):
         """One overdue quota is enough, even next to fresh ones."""
         self._freeze(mock_dt)
         self.app._last_response = {
-            'five_hour': {'utilization': 0.0, 'resets_at': '2025-01-15T11:59:00+00:00'},
-            'seven_day': {'utilization': 30.0, 'resets_at': '2025-01-18T12:00:00+00:00'},
+            'chat': {'utilization': 0.0, 'resets_at': '2025-01-15T11:59:00+00:00'},
+            'completions': {'utilization': 30.0, 'resets_at': '2025-01-18T12:00:00+00:00'},
         }
         self.assertTrue(self.app._reset_overdue())
 
     def test_null_resets_at_not_overdue(self):
         """A quota without an active window (null resets_at) is not overdue."""
-        self.app._last_response = {'five_hour': {'utilization': 0.0, 'resets_at': None}}
+        self.app._last_response = {'chat': {'utilization': 0.0, 'resets_at': None}}
         self.assertFalse(self.app._reset_overdue())
 
     def test_unparsable_resets_at_not_overdue(self):
         """A malformed timestamp is ignored instead of forcing the normal cadence."""
-        self.app._last_response = {'five_hour': {'utilization': 0.0, 'resets_at': 'not-a-date'}}
+        self.app._last_response = {'chat': {'utilization': 0.0, 'resets_at': 'not-a-date'}}
         self.assertFalse(self.app._reset_overdue())
 
     def test_timestamp_without_offset_ignored(self):
         """A timestamp without a UTC offset parses but cannot be compared - it is ignored."""
-        self.app._last_response = {'five_hour': {'utilization': 0.0, 'resets_at': '2020-01-15T12:00:00'}}
+        self.app._last_response = {'chat': {'utilization': 0.0, 'resets_at': '2020-01-15T12:00:00'}}
         self.assertFalse(self.app._reset_overdue())
         self.assertIsNone(self.app._seconds_until_next_reset())
 
@@ -1962,14 +1634,14 @@ class TestResetCommand(unittest.TestCase):
     def tearDown(self):
         _cleanup(self.app)
 
-    @patch('usage_monitor_for_codex.app.ON_RESET_COMMAND', ['echo reset'])
-    @patch('usage_monitor_for_codex.app.run_event_command')
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
-    def test_reset_command_fires_on_5h_drop(self, _icon, _tooltip, mock_cmd):
-        """Reset command fires when 5h usage drops."""
-        self.app._prev_utilization = {'five_hour': 98.0, 'seven_day': 10.0}
-        data = {'five_hour': {'utilization': 20.0, 'resets_at': '2025-01-15T18:00:00Z'}, 'seven_day': {'utilization': 10.0}}
+    @patch('usage_monitor_for_copilot.app.ON_RESET_COMMAND', ['echo reset'])
+    @patch('usage_monitor_for_copilot.app.run_event_command')
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='tooltip')
+    @patch('usage_monitor_for_copilot.app.create_icon_image')
+    def test_reset_command_fires_on_drop(self, _icon, _tooltip, mock_cmd):
+        """Reset command fires when a field's usage drops."""
+        self.app._prev_utilization = {'chat': 98.0, 'completions': 10.0}
+        data = {'chat': {'utilization': 20.0, 'resets_at': '2025-01-15T18:00:00Z'}, 'completions': {'utilization': 10.0}}
         self.app.cache = MagicMock()
         self.app.cache.update.return_value = UpdateResult(data=data)
 
@@ -1979,21 +1651,43 @@ class TestResetCommand(unittest.TestCase):
         cmd, env = mock_cmd.call_args[0]
         self.assertEqual(cmd, ['echo reset'])
         self.assertEqual(env['USAGE_MONITOR_EVENT'], 'reset')
-        self.assertEqual(env['USAGE_MONITOR_VARIANT'], 'five_hour')
+        self.assertEqual(env['USAGE_MONITOR_VARIANT'], 'chat')
         self.assertEqual(env['USAGE_MONITOR_UTILIZATION'], '20')
         self.assertEqual(env['USAGE_MONITOR_PREV_UTILIZATION'], '98')
-        self.assertEqual(env['USAGE_MONITOR_UTILIZATION_FIVE_HOUR'], '20')
-        self.assertEqual(env['USAGE_MONITOR_UTILIZATION_SEVEN_DAY'], '10')
+        self.assertEqual(env['USAGE_MONITOR_UTILIZATION_CHAT'], '20')
+        self.assertEqual(env['USAGE_MONITOR_UTILIZATION_COMPLETIONS'], '10')
         self.assertEqual(env['USAGE_MONITOR_RESETS_AT'], '2025-01-15T18:00:00Z')
 
-    @patch('usage_monitor_for_codex.app.ON_RESET_COMMAND', ['echo reset'])
-    @patch('usage_monitor_for_codex.app.run_event_command')
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
-    def test_reset_command_fires_on_7d_drop(self, _icon, _tooltip, mock_cmd):
-        """Reset command fires when 7d usage drops."""
-        self.app._prev_utilization = {'five_hour': 50.0, 'seven_day': 60.0}
-        data = {'five_hour': {'utilization': 50.0}, 'seven_day': {'utilization': 10.0, 'resets_at': '2025-01-20T00:00:00Z'}}
+    @patch('usage_monitor_for_copilot.app.ON_RESET_COMMAND', ['echo reset'])
+    @patch('usage_monitor_for_copilot.app.run_event_command')
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='tooltip')
+    @patch('usage_monitor_for_copilot.app.create_icon_image')
+    def test_reset_command_includes_per_field_resets_at(self, _icon, _tooltip, mock_cmd):
+        """Unlike Claude/Codex's five_hour/seven_day-only env, every detected
+        field's own resets_at is reported too (via _quota_snapshot_env),
+        since Copilot's field set is open-ended rather than a fixed pair."""
+        self.app._prev_utilization = {'chat': 98.0, 'completions': 10.0}
+        data = {
+            'chat': {'utilization': 20.0, 'resets_at': '2025-01-15T18:00:00Z'},
+            'completions': {'utilization': 10.0, 'resets_at': '2025-01-20T00:00:00Z'},
+        }
+        self.app.cache = MagicMock()
+        self.app.cache.update.return_value = UpdateResult(data=data)
+
+        self.app.update()
+
+        env = mock_cmd.call_args[0][1]
+        self.assertEqual(env['USAGE_MONITOR_RESETS_AT_CHAT'], '2025-01-15T18:00:00Z')
+        self.assertEqual(env['USAGE_MONITOR_RESETS_AT_COMPLETIONS'], '2025-01-20T00:00:00Z')
+
+    @patch('usage_monitor_for_copilot.app.ON_RESET_COMMAND', ['echo reset'])
+    @patch('usage_monitor_for_copilot.app.run_event_command')
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='tooltip')
+    @patch('usage_monitor_for_copilot.app.create_icon_image')
+    def test_reset_command_fires_on_second_field_drop(self, _icon, _tooltip, mock_cmd):
+        """Reset command fires when the second field's usage drops."""
+        self.app._prev_utilization = {'chat': 50.0, 'completions': 60.0}
+        data = {'chat': {'utilization': 50.0}, 'completions': {'utilization': 10.0, 'resets_at': '2025-01-20T00:00:00Z'}}
         self.app.cache = MagicMock()
         self.app.cache.update.return_value = UpdateResult(data=data)
 
@@ -2001,19 +1695,19 @@ class TestResetCommand(unittest.TestCase):
 
         mock_cmd.assert_called_once()
         env = mock_cmd.call_args[0][1]
-        self.assertEqual(env['USAGE_MONITOR_VARIANT'], 'seven_day')
+        self.assertEqual(env['USAGE_MONITOR_VARIANT'], 'completions')
         self.assertEqual(env['USAGE_MONITOR_PREV_UTILIZATION'], '60')
-        self.assertEqual(env['USAGE_MONITOR_UTILIZATION_FIVE_HOUR'], '50')
-        self.assertEqual(env['USAGE_MONITOR_UTILIZATION_SEVEN_DAY'], '10')
+        self.assertEqual(env['USAGE_MONITOR_UTILIZATION_CHAT'], '50')
+        self.assertEqual(env['USAGE_MONITOR_UTILIZATION_COMPLETIONS'], '10')
 
-    @patch('usage_monitor_for_codex.app.ON_RESET_COMMAND', ['echo reset'])
-    @patch('usage_monitor_for_codex.app.run_event_command')
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
+    @patch('usage_monitor_for_copilot.app.ON_RESET_COMMAND', ['echo reset'])
+    @patch('usage_monitor_for_copilot.app.run_event_command')
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='tooltip')
+    @patch('usage_monitor_for_copilot.app.create_icon_image')
     def test_reset_command_fires_on_any_drop_not_just_exhausted(self, _icon, _tooltip, mock_cmd):
         """Reset command fires on any usage drop, not just from near-exhaustion."""
-        self.app._prev_utilization = {'five_hour': 30.0, 'seven_day': 10.0}
-        data = {'five_hour': {'utilization': 5.0}, 'seven_day': {'utilization': 10.0}}
+        self.app._prev_utilization = {'chat': 30.0, 'completions': 10.0}
+        data = {'chat': {'utilization': 5.0}, 'completions': {'utilization': 10.0}}
         self.app.cache = MagicMock()
         self.app.cache.update.return_value = UpdateResult(data=data)
 
@@ -2024,14 +1718,14 @@ class TestResetCommand(unittest.TestCase):
         self.assertEqual(env['USAGE_MONITOR_PREV_UTILIZATION'], '30')
         self.assertEqual(env['USAGE_MONITOR_UTILIZATION'], '5')
 
-    @patch('usage_monitor_for_codex.app.ON_RESET_COMMAND', ['echo reset'])
-    @patch('usage_monitor_for_codex.app.run_event_command')
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
+    @patch('usage_monitor_for_copilot.app.ON_RESET_COMMAND', ['echo reset'])
+    @patch('usage_monitor_for_copilot.app.run_event_command')
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='tooltip')
+    @patch('usage_monitor_for_copilot.app.create_icon_image')
     def test_reset_command_missing_resets_at(self, _icon, _tooltip, mock_cmd):
         """USAGE_MONITOR_RESETS_AT is empty string when resets_at is absent from data."""
-        self.app._prev_utilization = {'five_hour': 80.0, 'seven_day': 10.0}
-        data = {'five_hour': {'utilization': 5.0}, 'seven_day': {'utilization': 10.0}}
+        self.app._prev_utilization = {'chat': 80.0, 'completions': 10.0}
+        data = {'chat': {'utilization': 5.0}, 'completions': {'utilization': 10.0}}
         self.app.cache = MagicMock()
         self.app.cache.update.return_value = UpdateResult(data=data)
 
@@ -2041,10 +1735,10 @@ class TestResetCommand(unittest.TestCase):
         env = mock_cmd.call_args[0][1]
         self.assertEqual(env['USAGE_MONITOR_RESETS_AT'], '')
 
-    @patch('usage_monitor_for_codex.app.ON_RESET_COMMAND', ['echo reset'])
-    @patch('usage_monitor_for_codex.app.run_event_command')
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
+    @patch('usage_monitor_for_copilot.app.ON_RESET_COMMAND', ['echo reset'])
+    @patch('usage_monitor_for_copilot.app.run_event_command')
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='tooltip')
+    @patch('usage_monitor_for_copilot.app.create_icon_image')
     def test_reset_command_null_resets_at(self, _icon, _tooltip, mock_cmd):
         """USAGE_MONITOR_RESETS_AT is empty string when the API reports resets_at as null.
 
@@ -2053,8 +1747,8 @@ class TestResetCommand(unittest.TestCase):
         the environment: the subprocess launch rejects it and the command
         silently never runs.
         """
-        self.app._prev_utilization = {'five_hour': 80.0, 'seven_day': 10.0}
-        data = {'five_hour': {'utilization': 0.0, 'resets_at': None}, 'seven_day': {'utilization': 10.0, 'resets_at': '2025-01-20T00:00:00Z'}}
+        self.app._prev_utilization = {'chat': 80.0, 'completions': 10.0}
+        data = {'chat': {'utilization': 0.0, 'resets_at': None}, 'completions': {'utilization': 10.0, 'resets_at': '2025-01-20T00:00:00Z'}}
         self.app.cache = MagicMock()
         self.app.cache.update.return_value = UpdateResult(data=data)
 
@@ -2062,18 +1756,18 @@ class TestResetCommand(unittest.TestCase):
 
         mock_cmd.assert_called_once()
         env = mock_cmd.call_args[0][1]
-        self.assertEqual(env['USAGE_MONITOR_VARIANT'], 'five_hour')
+        self.assertEqual(env['USAGE_MONITOR_VARIANT'], 'chat')
         self.assertEqual(env['USAGE_MONITOR_RESETS_AT'], '')
         self.assertTrue(all(isinstance(value, str) for value in env.values()))
 
-    @patch('usage_monitor_for_codex.app.ON_RESET_COMMAND', [])
-    @patch('usage_monitor_for_codex.app.run_event_command')
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
+    @patch('usage_monitor_for_copilot.app.ON_RESET_COMMAND', [])
+    @patch('usage_monitor_for_copilot.app.run_event_command')
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='tooltip')
+    @patch('usage_monitor_for_copilot.app.create_icon_image')
     def test_no_command_when_setting_empty(self, _icon, _tooltip, mock_cmd):
         """No command executed when on_reset_command is empty."""
-        self.app._prev_utilization = {'five_hour': 98.0, 'seven_day': 10.0}
-        data = {'five_hour': {'utilization': 20.0}, 'seven_day': {'utilization': 10.0}}
+        self.app._prev_utilization = {'chat': 98.0, 'completions': 10.0}
+        data = {'chat': {'utilization': 20.0}, 'completions': {'utilization': 10.0}}
         self.app.cache = MagicMock()
         self.app.cache.update.return_value = UpdateResult(data=data)
 
@@ -2081,14 +1775,14 @@ class TestResetCommand(unittest.TestCase):
 
         mock_cmd.assert_not_called()
 
-    @patch('usage_monitor_for_codex.app.ON_RESET_COMMAND', ['echo reset'])
-    @patch('usage_monitor_for_codex.app.run_event_command')
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
+    @patch('usage_monitor_for_copilot.app.ON_RESET_COMMAND', ['echo reset'])
+    @patch('usage_monitor_for_copilot.app.run_event_command')
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='tooltip')
+    @patch('usage_monitor_for_copilot.app.create_icon_image')
     def test_no_command_when_usage_increases(self, _icon, _tooltip, mock_cmd):
         """No command when usage is increasing."""
-        self.app._prev_utilization = {'five_hour': 50.0, 'seven_day': 10.0}
-        data = {'five_hour': {'utilization': 55.0}, 'seven_day': {'utilization': 10.0}}
+        self.app._prev_utilization = {'chat': 50.0, 'completions': 10.0}
+        data = {'chat': {'utilization': 55.0}, 'completions': {'utilization': 10.0}}
         self.app.cache = MagicMock()
         self.app.cache.update.return_value = UpdateResult(data=data)
 
@@ -2096,14 +1790,14 @@ class TestResetCommand(unittest.TestCase):
 
         mock_cmd.assert_not_called()
 
-    @patch('usage_monitor_for_codex.app.ON_RESET_COMMAND', ['echo reset'])
-    @patch('usage_monitor_for_codex.app.run_event_command')
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
+    @patch('usage_monitor_for_copilot.app.ON_RESET_COMMAND', ['echo reset'])
+    @patch('usage_monitor_for_copilot.app.run_event_command')
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='tooltip')
+    @patch('usage_monitor_for_copilot.app.create_icon_image')
     def test_both_quotas_drop_fires_two_commands(self, _icon, _tooltip, mock_cmd):
-        """Two commands fire when both 5h and 7d usage drop simultaneously."""
-        self.app._prev_utilization = {'five_hour': 95.0, 'seven_day': 80.0}
-        data = {'five_hour': {'utilization': 10.0}, 'seven_day': {'utilization': 20.0}}
+        """Two commands fire when both fields' usage drops simultaneously."""
+        self.app._prev_utilization = {'chat': 95.0, 'completions': 80.0}
+        data = {'chat': {'utilization': 10.0}, 'completions': {'utilization': 20.0}}
         self.app.cache = MagicMock()
         self.app.cache.update.return_value = UpdateResult(data=data)
 
@@ -2111,15 +1805,15 @@ class TestResetCommand(unittest.TestCase):
 
         self.assertEqual(mock_cmd.call_count, 2)
         variants = {call[0][1]['USAGE_MONITOR_VARIANT'] for call in mock_cmd.call_args_list}
-        self.assertEqual(variants, {'five_hour', 'seven_day'})
+        self.assertEqual(variants, {'chat', 'completions'})
 
-    @patch('usage_monitor_for_codex.app.ON_RESET_COMMAND', ['echo reset'])
-    @patch('usage_monitor_for_codex.app.run_event_command')
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
+    @patch('usage_monitor_for_copilot.app.ON_RESET_COMMAND', ['echo reset'])
+    @patch('usage_monitor_for_copilot.app.run_event_command')
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='tooltip')
+    @patch('usage_monitor_for_copilot.app.create_icon_image')
     def test_no_command_on_first_update(self, _icon, _tooltip, mock_cmd):
         """No reset command on first update (no previous values)."""
-        data = {'five_hour': {'utilization': 50.0}, 'seven_day': {'utilization': 10.0}}
+        data = {'chat': {'utilization': 50.0}, 'completions': {'utilization': 10.0}}
         self.app.cache = MagicMock()
         self.app.cache.update.return_value = UpdateResult(data=data)
 
@@ -2127,14 +1821,14 @@ class TestResetCommand(unittest.TestCase):
 
         mock_cmd.assert_not_called()
 
-    @patch('usage_monitor_for_codex.app.ON_RESET_COMMAND', ['echo reset'])
-    @patch('usage_monitor_for_codex.app.run_event_command')
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
+    @patch('usage_monitor_for_copilot.app.ON_RESET_COMMAND', ['echo reset'])
+    @patch('usage_monitor_for_copilot.app.run_event_command')
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='tooltip')
+    @patch('usage_monitor_for_copilot.app.create_icon_image')
     def test_no_command_when_usage_stable(self, _icon, _tooltip, mock_cmd):
         """No command when usage stays the same."""
-        self.app._prev_utilization = {'five_hour': 50.0, 'seven_day': 10.0}
-        data = {'five_hour': {'utilization': 50.0}, 'seven_day': {'utilization': 10.0}}
+        self.app._prev_utilization = {'chat': 50.0, 'completions': 10.0}
+        data = {'chat': {'utilization': 50.0}, 'completions': {'utilization': 10.0}}
         self.app.cache = MagicMock()
         self.app.cache.update.return_value = UpdateResult(data=data)
 
@@ -2142,15 +1836,15 @@ class TestResetCommand(unittest.TestCase):
 
         mock_cmd.assert_not_called()
 
-    @patch('usage_monitor_for_codex.app.ON_RESET_COMMAND', ['echo reset'])
-    @patch('usage_monitor_for_codex.app.run_event_command')
-    @patch('usage_monitor_for_codex.app.is_workstation_locked', return_value=True)
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
+    @patch('usage_monitor_for_copilot.app.ON_RESET_COMMAND', ['echo reset'])
+    @patch('usage_monitor_for_copilot.app.run_event_command')
+    @patch('usage_monitor_for_copilot.app.is_workstation_locked', return_value=True)
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='tooltip')
+    @patch('usage_monitor_for_copilot.app.create_icon_image')
     def test_reset_command_fires_while_notification_deferred(self, _icon, _tooltip, _locked, mock_cmd):
         """Reset command fires immediately even when notification is deferred due to idle/lock."""
-        self.app._prev_utilization = {'five_hour': 97.0, 'seven_day': 50.0}
-        data = {'five_hour': {'utilization': 10.0}, 'seven_day': {'utilization': 50.0}}
+        self.app._prev_utilization = {'chat': 97.0, 'completions': 50.0}
+        data = {'chat': {'utilization': 10.0}, 'completions': {'utilization': 50.0}}
         self.app.cache = MagicMock()
         self.app.cache.update.return_value = UpdateResult(data=data)
 
@@ -2167,24 +1861,24 @@ class TestThresholdCommand(unittest.TestCase):
 
     def setUp(self):
         self.app = _make_app()
-        self.app._prev_utilization = {'five_hour': 0.0}
+        self.app._prev_utilization = {'chat': 0.0}
         self.app._first_update_done = True
 
     def tearDown(self):
         _cleanup(self.app)
 
-    @patch('usage_monitor_for_codex.app.ON_THRESHOLD_COMMAND', ['notify.bat'])
-    @patch('usage_monitor_for_codex.app.ALERT_TIME_AWARE', False)
-    @patch('usage_monitor_for_codex.app.run_event_command')
+    @patch('usage_monitor_for_copilot.app.ON_THRESHOLD_COMMAND', ['notify.bat'])
+    @patch('usage_monitor_for_copilot.app.ALERT_TIME_AWARE', False)
+    @patch('usage_monitor_for_copilot.app.run_event_command')
     def test_threshold_command_fires_on_crossing(self, mock_cmd):
         """Threshold command fires when usage crosses a configured threshold."""
-        self.app._check_threshold_alerts({'five_hour': {'utilization': 85.0, 'resets_at': '2025-01-15T18:00:00Z'}})
+        self.app._check_threshold_alerts({'chat': {'utilization': 85.0, 'resets_at': '2025-01-15T18:00:00Z'}})
 
         mock_cmd.assert_called_once()
         cmd, env = mock_cmd.call_args[0]
         self.assertEqual(cmd, ['notify.bat'])
         self.assertEqual(env['USAGE_MONITOR_EVENT'], 'threshold')
-        self.assertEqual(env['USAGE_MONITOR_VARIANT'], 'five_hour')
+        self.assertEqual(env['USAGE_MONITOR_VARIANT'], 'chat')
         self.assertEqual(env['USAGE_MONITOR_UTILIZATION'], '85')
         self.assertEqual(env['USAGE_MONITOR_THRESHOLD'], '80')
         self.assertEqual(env['USAGE_MONITOR_RESETS_AT'], '2025-01-15T18:00:00Z')
@@ -2193,93 +1887,101 @@ class TestThresholdCommand(unittest.TestCase):
         # Threshold crossings fire automatically, so they stay silent (no error dialog).
         self.assertFalse(mock_cmd.call_args[1].get('capture_output'))
 
-    @patch('usage_monitor_for_codex.app.ON_THRESHOLD_COMMAND', ['notify.bat'])
-    @patch('usage_monitor_for_codex.app.ALERT_TIME_AWARE', False)
-    @patch('usage_monitor_for_codex.app.run_event_command')
+    @patch('usage_monitor_for_copilot.app.ON_THRESHOLD_COMMAND', ['notify.bat'])
+    @patch('usage_monitor_for_copilot.app.ALERT_TIME_AWARE', False)
+    @patch('usage_monitor_for_copilot.app.run_event_command')
     def test_threshold_command_null_resets_at(self, mock_cmd):
         """USAGE_MONITOR_RESETS_AT is empty string when resets_at is null, never None."""
-        self.app._check_threshold_alerts({'five_hour': {'utilization': 85.0, 'resets_at': None}})
+        self.app._check_threshold_alerts({'chat': {'utilization': 85.0, 'resets_at': None}})
 
         mock_cmd.assert_called_once()
         env = mock_cmd.call_args[0][1]
         self.assertEqual(env['USAGE_MONITOR_RESETS_AT'], '')
         self.assertTrue(all(isinstance(value, str) for value in env.values()))
 
-    @patch('usage_monitor_for_codex.app.ON_THRESHOLD_COMMAND', [])
-    @patch('usage_monitor_for_codex.app.run_event_command')
+    @patch('usage_monitor_for_copilot.app.ON_THRESHOLD_COMMAND', [])
+    @patch('usage_monitor_for_copilot.app.run_event_command')
     def test_no_command_when_setting_empty(self, mock_cmd):
         """No command executed when on_threshold_command is empty."""
-        self.app._check_threshold_alerts({'five_hour': {'utilization': 85.0}})
+        self.app._check_threshold_alerts({'chat': {'utilization': 85.0}})
 
         mock_cmd.assert_not_called()
 
-    @patch('usage_monitor_for_codex.app.ON_THRESHOLD_COMMAND', ['notify.bat'])
-    @patch('usage_monitor_for_codex.app.run_event_command')
+    @patch('usage_monitor_for_copilot.app.ON_THRESHOLD_COMMAND', ['notify.bat'])
+    @patch('usage_monitor_for_copilot.app.run_event_command')
     def test_no_command_below_threshold(self, mock_cmd):
         """No command when usage is below all thresholds."""
-        self.app._check_threshold_alerts({'five_hour': {'utilization': 50.0}})
+        self.app._check_threshold_alerts({'chat': {'utilization': 50.0}})
 
         mock_cmd.assert_not_called()
 
-    @patch('usage_monitor_for_codex.app.ON_THRESHOLD_COMMAND', ['notify.bat'])
-    @patch('usage_monitor_for_codex.app.run_event_command')
+    @patch('usage_monitor_for_copilot.app.ON_THRESHOLD_COMMAND', ['notify.bat'])
+    @patch('usage_monitor_for_copilot.app.run_event_command')
     def test_no_duplicate_command(self, mock_cmd):
         """No duplicate command for same threshold."""
-        self.app._check_threshold_alerts({'five_hour': {'utilization': 85.0}})
+        self.app._check_threshold_alerts({'chat': {'utilization': 85.0}})
         mock_cmd.reset_mock()
 
-        self.app._check_threshold_alerts({'five_hour': {'utilization': 88.0}})
+        self.app._check_threshold_alerts({'chat': {'utilization': 88.0}})
 
         mock_cmd.assert_not_called()
 
-    @patch('usage_monitor_for_codex.app.ON_THRESHOLD_COMMAND', ['notify.bat'])
-    @patch('usage_monitor_for_codex.app.run_event_command')
+    @patch('usage_monitor_for_copilot.app.ON_THRESHOLD_COMMAND', ['notify.bat'])
+    @patch('usage_monitor_for_copilot.app.run_event_command')
     def test_command_for_higher_threshold(self, mock_cmd):
         """Command fires again when usage crosses the next higher threshold."""
-        self.app._check_threshold_alerts({'five_hour': {'utilization': 85.0}})
+        self.app._check_threshold_alerts({'chat': {'utilization': 85.0}})
         mock_cmd.reset_mock()
 
-        self.app._check_threshold_alerts({'five_hour': {'utilization': 97.0}})
+        self.app._check_threshold_alerts({'chat': {'utilization': 97.0}})
 
         mock_cmd.assert_called_once()
         env = mock_cmd.call_args[0][1]
         self.assertEqual(env['USAGE_MONITOR_THRESHOLD'], '95')
         self.assertEqual(env['USAGE_MONITOR_UTILIZATION'], '97')
 
-    @patch('usage_monitor_for_codex.app.ON_THRESHOLD_COMMAND', ['notify.bat'])
-    @patch('usage_monitor_for_codex.app.ALERT_TIME_AWARE', True)
-    @patch('usage_monitor_for_codex.app.ALERT_TIME_AWARE_BELOW', 90)
-    @patch('usage_monitor_for_codex.app.run_event_command')
+    @patch('usage_monitor_for_copilot.app.ON_THRESHOLD_COMMAND', ['notify.bat'])
+    @patch('usage_monitor_for_copilot.app.ALERT_TIME_AWARE', True)
+    @patch('usage_monitor_for_copilot.app.ALERT_TIME_AWARE_BELOW', 90)
+    @patch('usage_monitor_for_copilot.app.run_event_command')
     def test_time_aware_suppression_suppresses_command(self, mock_cmd):
-        """Time-aware suppression also suppresses the command."""
-        with patch('usage_monitor_for_codex.app.elapsed_pct', return_value=90.0):
-            self.app._check_threshold_alerts({'five_hour': {'utilization': 82.0, 'resets_at': '2025-01-15T18:00:00Z'}})
+        """Time-aware suppression also suppresses the command.
+
+        Real Copilot field names carry no period - field_period would return
+        None and skip the suppression block entirely before elapsed_pct is
+        ever called, making this test vacuous.  Patched truthy (matches
+        TestTimeAwareAlerts.setUp's rationale) so this still exercises the
+        shared suppression logic that real period-bearing fields would use.
+        """
+        with patch('usage_monitor_for_copilot.app.field_period', return_value=18000), \
+                patch('usage_monitor_for_copilot.app.elapsed_pct', return_value=90.0):
+            self.app._check_threshold_alerts({'chat': {'utilization': 82.0, 'resets_at': '2025-01-15T18:00:00Z'}})
 
         mock_cmd.assert_not_called()
 
-    @patch('usage_monitor_for_codex.app.ON_THRESHOLD_COMMAND', ['notify.bat'])
-    @patch('usage_monitor_for_codex.app.ALERT_TIME_AWARE', False)
-    @patch('usage_monitor_for_codex.app.run_event_command')
+    @patch('usage_monitor_for_copilot.app.ON_THRESHOLD_COMMAND', ['notify.bat'])
+    @patch('usage_monitor_for_copilot.app.ALERT_TIME_AWARE', False)
+    @patch('usage_monitor_for_copilot.app.run_event_command')
     def test_no_command_on_first_update(self, mock_cmd):
         """Threshold command is suppressed on first update (notification still fires)."""
         self.app._first_update_done = False
 
-        self.app._check_threshold_alerts({'five_hour': {'utilization': 85.0, 'resets_at': '2025-01-15T18:00:00Z'}})
+        self.app._check_threshold_alerts({'chat': {'utilization': 85.0, 'resets_at': '2025-01-15T18:00:00Z'}})
 
         # Notification fires (threshold was exceeded), but command does not
         self.app.icon.notify.assert_called_once()
         mock_cmd.assert_not_called()
 
-    @patch('usage_monitor_for_codex.app.ON_THRESHOLD_COMMAND', ['notify.bat'])
-    @patch('usage_monitor_for_codex.app.ALERT_TIME_AWARE', False)
-    @patch('usage_monitor_for_codex.app.run_event_command')
-    @patch('usage_monitor_for_codex.app.is_workstation_locked', return_value=True)
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
+    @patch('usage_monitor_for_copilot.app.ON_THRESHOLD_COMMAND', ['notify.bat'])
+    @patch('usage_monitor_for_copilot.app.ALERT_TIME_AWARE', False)
+    @patch('usage_monitor_for_copilot.app.run_event_command')
+    @patch('usage_monitor_for_copilot.app.is_workstation_locked', return_value=True)
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='tooltip')
+    @patch('usage_monitor_for_copilot.app.create_icon_image')
     def test_threshold_command_fires_while_notification_deferred(self, _icon, _tooltip, _locked, mock_cmd):
         """Threshold command fires immediately even when notification is deferred due to idle/lock."""
-        self.app._prev_utilization = {'five_hour': 50.0, 'seven_day': 10.0}
-        data = {'five_hour': {'utilization': 85.0, 'resets_at': '2025-01-15T18:00:00Z'}, 'seven_day': {'utilization': 10.0}}
+        self.app._prev_utilization = {'chat': 50.0, 'completions': 10.0}
+        data = {'chat': {'utilization': 85.0, 'resets_at': '2025-01-15T18:00:00Z'}, 'completions': {'utilization': 10.0}}
         self.app.cache = MagicMock()
         self.app.cache.update.return_value = UpdateResult(data=data)
 
@@ -2287,46 +1989,8 @@ class TestThresholdCommand(unittest.TestCase):
 
         mock_cmd.assert_called_once()
         self.assertEqual(mock_cmd.call_args[0][1]['USAGE_MONITOR_EVENT'], 'threshold')
-        self.assertIn('threshold_five_hour', self.app._deferred_notifications)
+        self.assertIn('threshold_chat', self.app._deferred_notifications)
         self.app.icon.notify.assert_not_called()
-
-
-class TestExtraUsageCommand(unittest.TestCase):
-    """Tests for on_threshold_command with extra usage events."""
-
-    def setUp(self):
-        self.app = _make_app()
-        self.app._prev_utilization = {'five_hour': 0.0}
-        self.app._first_update_done = True
-
-    def tearDown(self):
-        _cleanup(self.app)
-
-    @patch('usage_monitor_for_codex.app.ON_THRESHOLD_COMMAND', ['notify.bat'])
-    @patch('usage_monitor_for_codex.app.run_event_command')
-    def test_extra_usage_command_includes_amounts(self, mock_cmd):
-        """Extra usage threshold command includes used and limit amounts."""
-        data = {
-            'extra_usage': {'is_enabled': True, 'monthly_limit': 1000, 'used_credits': 850},
-        }
-        self.app._check_threshold_alerts(data)
-
-        mock_cmd.assert_called_once()
-        env = mock_cmd.call_args[0][1]
-        self.assertEqual(env['USAGE_MONITOR_VARIANT'], 'extra_usage')
-        self.assertIn('USAGE_MONITOR_EXTRA_USED', env)
-        self.assertIn('USAGE_MONITOR_EXTRA_LIMIT', env)
-
-    @patch('usage_monitor_for_codex.app.ON_THRESHOLD_COMMAND', [])
-    @patch('usage_monitor_for_codex.app.run_event_command')
-    def test_extra_usage_no_command_when_empty(self, mock_cmd):
-        """No command for extra usage when setting is empty."""
-        data = {
-            'extra_usage': {'is_enabled': True, 'monthly_limit': 1000, 'used_credits': 850},
-        }
-        self.app._check_threshold_alerts(data)
-
-        mock_cmd.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -2342,101 +2006,50 @@ class TestTestEventCommands(unittest.TestCase):
     def tearDown(self):
         _cleanup(self.app)
 
-    @patch('usage_monitor_for_codex.app.ON_RESET_COMMAND', ['echo reset'])
-    @patch('usage_monitor_for_codex.app.run_event_command')
-    def test_reset_5h_fires_with_correct_env(self, mock_cmd):
-        """Test reset 5h handler passes all required env vars with correct values."""
-        self.app.on_test_reset_5h()
+    @patch('usage_monitor_for_copilot.app.ON_RESET_COMMAND', ['echo reset'])
+    @patch('usage_monitor_for_copilot.app.run_event_command')
+    def test_reset_fires_with_correct_env(self, mock_cmd):
+        """Test reset handler passes all required env vars with correct values."""
+        self.app.on_test_reset()
 
         mock_cmd.assert_called_once()
         cmd, env = mock_cmd.call_args[0]
         self.assertEqual(cmd, ['echo reset'])
         self.assertEqual(env['USAGE_MONITOR_EVENT'], 'reset')
-        self.assertEqual(env['USAGE_MONITOR_VARIANT'], 'five_hour')
+        self.assertEqual(env['USAGE_MONITOR_VARIANT'], 'premium_interactions')
         self.assertEqual(env['USAGE_MONITOR_UTILIZATION'], '0')
         self.assertEqual(env['USAGE_MONITOR_PREV_UTILIZATION'], '95')
-        self.assertEqual(env['USAGE_MONITOR_UTILIZATION_FIVE_HOUR'], '0')
-        self.assertEqual(env['USAGE_MONITOR_UTILIZATION_SEVEN_DAY'], '45')
-        self.assertIn('USAGE_MONITOR_RESETS_AT', env)
+        self.assertEqual(env['USAGE_MONITOR_UTILIZATION_PREMIUM_INTERACTIONS'], '0')
+        # resets_at is always '' for Copilot (no parseable period), unlike
+        # Claude/Codex's five_hour/seven_day tests fed a future timestamp here.
+        self.assertEqual(env['USAGE_MONITOR_RESETS_AT'], '')
         self.assertIn('USAGE_MONITOR_TITLE', env)
         self.assertIn('USAGE_MONITOR_MESSAGE', env)
         # Test-menu invocations are user-driven, so failures are surfaced.
         self.assertTrue(mock_cmd.call_args[1].get('capture_output'))
 
-    @patch('usage_monitor_for_codex.app.ON_RESET_COMMAND', ['echo reset'])
-    @patch('usage_monitor_for_codex.app.run_event_command')
-    def test_reset_7d_fires_with_correct_env(self, mock_cmd):
-        """Test reset 7d handler passes all required env vars with correct values."""
-        self.app.on_test_reset_7d()
-
-        mock_cmd.assert_called_once()
-        cmd, env = mock_cmd.call_args[0]
-        self.assertEqual(cmd, ['echo reset'])
-        self.assertEqual(env['USAGE_MONITOR_EVENT'], 'reset')
-        self.assertEqual(env['USAGE_MONITOR_VARIANT'], 'seven_day')
-        self.assertEqual(env['USAGE_MONITOR_UTILIZATION'], '0')
-        self.assertEqual(env['USAGE_MONITOR_PREV_UTILIZATION'], '99')
-        self.assertEqual(env['USAGE_MONITOR_UTILIZATION_FIVE_HOUR'], '12')
-        self.assertEqual(env['USAGE_MONITOR_UTILIZATION_SEVEN_DAY'], '0')
-        self.assertIn('USAGE_MONITOR_RESETS_AT', env)
-
-    @patch('usage_monitor_for_codex.app.ON_THRESHOLD_COMMAND', ['notify.bat'])
-    @patch('usage_monitor_for_codex.app.run_event_command')
-    def test_threshold_5h_fires_with_correct_env(self, mock_cmd):
-        """Test threshold 5h handler passes all required env vars with correct values."""
-        self.app.on_test_threshold_5h()
+    @patch('usage_monitor_for_copilot.app.ON_THRESHOLD_COMMAND', ['notify.bat'])
+    @patch('usage_monitor_for_copilot.app.run_event_command')
+    def test_threshold_fires_with_correct_env(self, mock_cmd):
+        """Test threshold handler passes all required env vars with correct values."""
+        self.app.on_test_threshold()
 
         mock_cmd.assert_called_once()
         cmd, env = mock_cmd.call_args[0]
         self.assertEqual(cmd, ['notify.bat'])
         self.assertEqual(env['USAGE_MONITOR_EVENT'], 'threshold')
-        self.assertEqual(env['USAGE_MONITOR_VARIANT'], 'five_hour')
+        self.assertEqual(env['USAGE_MONITOR_VARIANT'], 'premium_interactions')
         self.assertEqual(env['USAGE_MONITOR_UTILIZATION'], '82')
         self.assertEqual(env['USAGE_MONITOR_THRESHOLD'], '80')
-        self.assertIn('USAGE_MONITOR_RESETS_AT', env)
+        self.assertEqual(env['USAGE_MONITOR_RESETS_AT'], '')
         self.assertIn('USAGE_MONITOR_TITLE', env)
         self.assertIn('USAGE_MONITOR_MESSAGE', env)
 
-    @patch('usage_monitor_for_codex.app.ON_THRESHOLD_COMMAND', ['notify.bat'])
-    @patch('usage_monitor_for_codex.app.run_event_command')
-    def test_threshold_7d_fires_with_correct_env(self, mock_cmd):
-        """Test threshold 7d handler passes all required env vars with correct values."""
-        self.app.on_test_threshold_7d()
-
-        mock_cmd.assert_called_once()
-        cmd, env = mock_cmd.call_args[0]
-        self.assertEqual(cmd, ['notify.bat'])
-        self.assertEqual(env['USAGE_MONITOR_EVENT'], 'threshold')
-        self.assertEqual(env['USAGE_MONITOR_VARIANT'], 'seven_day')
-        self.assertEqual(env['USAGE_MONITOR_UTILIZATION'], '81')
-        self.assertEqual(env['USAGE_MONITOR_THRESHOLD'], '80')
-        self.assertIn('USAGE_MONITOR_RESETS_AT', env)
-
-    @patch('usage_monitor_for_codex.app.ON_RESET_COMMAND', ['echo reset'])
-    @patch('usage_monitor_for_codex.app.run_event_command')
-    def test_reset_5h_resets_at_is_valid_iso_timestamp(self, mock_cmd):
-        """USAGE_MONITOR_RESETS_AT is a parseable ISO 8601 timestamp in the future."""
-        self.app.on_test_reset_5h()
-
-        env = mock_cmd.call_args[0][1]
-        resets_at = datetime.fromisoformat(env['USAGE_MONITOR_RESETS_AT'])
-        self.assertGreater(resets_at, datetime.now(timezone.utc))
-
-    @patch('usage_monitor_for_codex.app.ON_THRESHOLD_COMMAND', ['notify.bat'])
-    @patch('usage_monitor_for_codex.app.run_event_command')
-    def test_threshold_5h_resets_at_is_valid_iso_timestamp(self, mock_cmd):
-        """USAGE_MONITOR_RESETS_AT is a parseable ISO 8601 timestamp in the future."""
-        self.app.on_test_threshold_5h()
-
-        env = mock_cmd.call_args[0][1]
-        resets_at = datetime.fromisoformat(env['USAGE_MONITOR_RESETS_AT'])
-        self.assertGreater(resets_at, datetime.now(timezone.utc))
-
-    @patch('usage_monitor_for_codex.app.ON_THRESHOLD_COMMAND', ['notify.bat'])
-    @patch('usage_monitor_for_codex.app.run_event_command')
+    @patch('usage_monitor_for_copilot.app.ON_THRESHOLD_COMMAND', ['notify.bat'])
+    @patch('usage_monitor_for_copilot.app.run_event_command')
     def test_threshold_message_contains_utilization_pct(self, mock_cmd):
         """USAGE_MONITOR_MESSAGE includes the utilization percentage."""
-        self.app.on_test_threshold_5h()
+        self.app.on_test_threshold()
 
         env = mock_cmd.call_args[0][1]
         self.assertIn('82', env['USAGE_MONITOR_MESSAGE'])
@@ -2458,8 +2071,8 @@ class TestPollLoopAwayCadence(unittest.TestCase):
     def tearDown(self):
         _cleanup(self.app)
 
-    @patch('usage_monitor_for_codex.app.time.sleep')
-    @patch('usage_monitor_for_codex.app.time.time', return_value=1000.0)
+    @patch('usage_monitor_for_copilot.app.time.sleep')
+    @patch('usage_monitor_for_copilot.app.time.time', return_value=1000.0)
     def test_away_keeps_polling(self, _mock_time, _mock_sleep):
         """Polling continues while the user stays away - the loop never blocks."""
         self.app.cache.last_success_time = 1000.0
@@ -2480,8 +2093,8 @@ class TestPollLoopAwayCadence(unittest.TestCase):
 
         self.assertEqual(update_count[0], 2)
 
-    @patch('usage_monitor_for_codex.app.time.sleep')
-    @patch('usage_monitor_for_codex.app.time.time', return_value=1000.0)
+    @patch('usage_monitor_for_copilot.app.time.sleep')
+    @patch('usage_monitor_for_copilot.app.time.time', return_value=1000.0)
     def test_return_polls_once_normal_interval_elapsed(self, _mock_time, _mock_sleep):
         """Coming back polls right away when the normal interval has already elapsed."""
         self.app.cache.last_success_time = 500.0
@@ -2499,8 +2112,8 @@ class TestPollLoopAwayCadence(unittest.TestCase):
         # which is already in the past, so a second poll ran immediately.
         self.assertEqual(len(polls), 2)
 
-    @patch('usage_monitor_for_codex.app.time.sleep')
-    @patch('usage_monitor_for_codex.app.time.time', return_value=1000.0)
+    @patch('usage_monitor_for_copilot.app.time.sleep')
+    @patch('usage_monitor_for_copilot.app.time.time', return_value=1000.0)
     def test_return_waits_out_remaining_interval(self, _mock_time, _mock_sleep):
         """Coming back shortly after a fetch waits out the rest of the normal interval."""
         self.app.cache.last_success_time = 950.0
@@ -2517,8 +2130,8 @@ class TestPollLoopAwayCadence(unittest.TestCase):
         self.assertEqual(len(polls), 1)
         self.assertEqual(self.app._next_poll_time, 950.0 + 180)
 
-    @patch('usage_monitor_for_codex.app.time.sleep')
-    @patch('usage_monitor_for_codex.app.time.time', return_value=1000.0)
+    @patch('usage_monitor_for_copilot.app.time.sleep')
+    @patch('usage_monitor_for_copilot.app.time.time', return_value=1000.0)
     def test_return_near_reset_realigns_instead_of_polling(self, _mock_time, _mock_sleep):
         """Returning within the cooldown before a reset defers the poll to just after it."""
         self.app.cache.last_success_time = 1000.0
@@ -2537,8 +2150,8 @@ class TestPollLoopAwayCadence(unittest.TestCase):
         self.assertEqual(len(polls), 1)
         self.assertEqual(self.app._next_poll_time, 1000.0 + POLL_FAST)
 
-    @patch('usage_monitor_for_codex.app.time.sleep')
-    @patch('usage_monitor_for_codex.app.time.time', return_value=100.0)
+    @patch('usage_monitor_for_copilot.app.time.sleep')
+    @patch('usage_monitor_for_copilot.app.time.time', return_value=100.0)
     def test_account_switch_detected_while_away(self, _mock_time, _mock_sleep):
         """A token change is picked up on a locked machine, not only when present."""
         force_calls = []
@@ -2553,13 +2166,13 @@ class TestPollLoopAwayCadence(unittest.TestCase):
              patch.object(self.app, '_account_switched', return_value=True), \
              patch.object(self.app, '_polling_throttled', return_value=True), \
              patch.object(self.app, '_seconds_until_next_reset', return_value=None), \
-             patch('usage_monitor_for_codex.app.read_access_token', side_effect=['tok-a', 'tok-b', 'tok-b', 'tok-b']):
+             patch('usage_monitor_for_copilot.app.read_access_token', side_effect=['tok-a', 'tok-b', 'tok-b', 'tok-b']):
             self.app.poll_loop()
 
         self.assertEqual(force_calls, [False, True])
 
-    @patch('usage_monitor_for_codex.app.ON_RESET_COMMAND', [])
-    @patch('usage_monitor_for_codex.app.time.time', return_value=1000.0)
+    @patch('usage_monitor_for_copilot.app.ON_RESET_COMMAND', [])
+    @patch('usage_monitor_for_copilot.app.time.time', return_value=1000.0)
     def test_midwait_fetch_near_reset_capped_to_reset_slot(self, mock_time):
         """A concurrent fetch near a reset must not push the poll a full interval past it."""
         self.app.cache.last_success_time = 900.0
@@ -2572,15 +2185,15 @@ class TestPollLoopAwayCadence(unittest.TestCase):
              patch.object(self.app, '_calculate_poll_interval', return_value=180), \
              patch.object(self.app, '_polling_throttled', side_effect=_stop_after_one_pass(self.app)), \
              patch.object(self.app, '_seconds_until_next_reset', return_value=30.0), \
-             patch('usage_monitor_for_codex.app.time.sleep', side_effect=advance_success):
+             patch('usage_monitor_for_copilot.app.time.sleep', side_effect=advance_success):
             self.app.poll_loop()
 
         # Capped to the reset-aligned slot (1000 + POLL_FAST = 1120), not the
         # uncapped push-forward (last_success + interval = 1180).
         self.assertEqual(self.app._next_poll_time, 1000.0 + POLL_FAST)
 
-    @patch('usage_monitor_for_codex.app.ON_RESET_COMMAND', [])
-    @patch('usage_monitor_for_codex.app.time.time', return_value=1000.0)
+    @patch('usage_monitor_for_copilot.app.ON_RESET_COMMAND', [])
+    @patch('usage_monitor_for_copilot.app.time.time', return_value=1000.0)
     def test_midwait_fetch_without_reset_not_capped(self, mock_time):
         """With no reset nearby, the push-forward is not clamped to a reset slot."""
         self.app.cache.last_success_time = 900.0
@@ -2592,14 +2205,14 @@ class TestPollLoopAwayCadence(unittest.TestCase):
              patch.object(self.app, '_calculate_poll_interval', return_value=180), \
              patch.object(self.app, '_polling_throttled', side_effect=_stop_after_one_pass(self.app)), \
              patch.object(self.app, '_seconds_until_next_reset', return_value=None), \
-             patch('usage_monitor_for_codex.app.time.sleep', side_effect=advance_success):
+             patch('usage_monitor_for_copilot.app.time.sleep', side_effect=advance_success):
             self.app.poll_loop()
 
         # No reset: poll stays at last_success + interval (1000 + 180 = 1180).
         self.assertEqual(self.app._next_poll_time, 1000.0 + 180)
 
-    @patch('usage_monitor_for_codex.app.ON_RESET_COMMAND', [])
-    @patch('usage_monitor_for_codex.app.time.time', return_value=1000.0)
+    @patch('usage_monitor_for_copilot.app.ON_RESET_COMMAND', [])
+    @patch('usage_monitor_for_copilot.app.time.time', return_value=1000.0)
     def test_midwait_fetch_never_lands_in_danger_window(self, mock_time):
         """A pushed-forward poll must not land in the danger window (the last
         POLL_FAST - RESET_BUFFER seconds before a reset), from where the
@@ -2616,14 +2229,14 @@ class TestPollLoopAwayCadence(unittest.TestCase):
              patch.object(self.app, '_calculate_poll_interval', return_value=180), \
              patch.object(self.app, '_polling_throttled', side_effect=_stop_after_one_pass(self.app)), \
              patch.object(self.app, '_seconds_until_next_reset', return_value=209.0), \
-             patch('usage_monitor_for_codex.app.time.sleep', side_effect=advance_success):
+             patch('usage_monitor_for_copilot.app.time.sleep', side_effect=advance_success):
             self.app.poll_loop()
 
         # Deferred to the reset-aligned slot just after the reset:
         # max(1000 + 209 + RESET_BUFFER, 1000 + POLL_FAST) = 1214.
         self.assertEqual(self.app._next_poll_time, 1000.0 + 209.0 + RESET_BUFFER)
 
-    @patch('usage_monitor_for_codex.app.ON_RESET_COMMAND', [])
+    @patch('usage_monitor_for_copilot.app.ON_RESET_COMMAND', [])
     def test_backward_clock_jump_reanchors_poll_target(self):
         """A backward clock jump must not leave the next poll stuck at a target
         that is now hours in the future - the wait re-anchors to the interval."""
@@ -2637,8 +2250,8 @@ class TestPollLoopAwayCadence(unittest.TestCase):
              patch.object(self.app, '_calculate_poll_interval', return_value=180), \
              patch.object(self.app, '_polling_throttled', side_effect=_stop_after_one_pass(self.app)), \
              patch.object(self.app, '_seconds_until_next_reset', return_value=None), \
-             patch('usage_monitor_for_codex.app.time.time', side_effect=lambda: clock['now']), \
-             patch('usage_monitor_for_codex.app.time.sleep', side_effect=jump_back):
+             patch('usage_monitor_for_copilot.app.time.time', side_effect=lambda: clock['now']), \
+             patch('usage_monitor_for_copilot.app.time.sleep', side_effect=jump_back):
             self.app.poll_loop()
 
         self.assertEqual(self.app._next_poll_time, 5000.0 + 180)
@@ -2655,8 +2268,8 @@ class TestPollLoopAccountSwitch(unittest.TestCase):
     def tearDown(self):
         _cleanup(self.app)
 
-    @patch('usage_monitor_for_codex.app.time.sleep')
-    @patch('usage_monitor_for_codex.app.time.time', return_value=1000.0)
+    @patch('usage_monitor_for_copilot.app.time.sleep')
+    @patch('usage_monitor_for_copilot.app.time.time', return_value=1000.0)
     def test_deferred_notifications_flushed_when_user_present(self, _mock_time, _mock_sleep):
         """Notifications deferred while away are shown once the user is present,
         even when the poll loop's away branch is never entered (the user
@@ -2688,8 +2301,8 @@ class TestPollLoopAccountSwitch(unittest.TestCase):
         self.assertEqual(self.app.icon.notify.call_count, 2)
         self.assertEqual(self.app._deferred_notifications, {'c': ('m3', 't3')})
 
-    @patch('usage_monitor_for_codex.app.time.sleep')
-    @patch('usage_monitor_for_codex.app.time.time', return_value=100.0)
+    @patch('usage_monitor_for_copilot.app.time.sleep')
+    @patch('usage_monitor_for_copilot.app.time.time', return_value=100.0)
     def test_token_change_to_other_account_forces_update(self, _mock_time, _mock_sleep):
         """A token change confirmed as a different account triggers a forced update."""
         force_calls = []
@@ -2704,13 +2317,13 @@ class TestPollLoopAccountSwitch(unittest.TestCase):
              patch.object(self.app, '_account_switched', return_value=True), \
              patch.object(self.app, '_is_user_away', return_value=False), \
              patch.object(self.app, '_seconds_until_next_reset', return_value=None), \
-             patch('usage_monitor_for_codex.app.read_access_token', side_effect=['tok-a', 'tok-b', 'tok-b', 'tok-b']):
+             patch('usage_monitor_for_copilot.app.read_access_token', side_effect=['tok-a', 'tok-b', 'tok-b', 'tok-b']):
             self.app.poll_loop()
 
         # First poll is the normal cadence, the second is forced by the switch.
         self.assertEqual(force_calls, [False, True])
 
-    @patch('usage_monitor_for_codex.app.time.time', return_value=100.0)
+    @patch('usage_monitor_for_copilot.app.time.time', return_value=100.0)
     def test_token_refresh_same_account_does_not_force(self, _mock_time):
         """A token change that is only a refresh of the same account does not force a poll."""
         force_calls = []
@@ -2724,15 +2337,15 @@ class TestPollLoopAccountSwitch(unittest.TestCase):
              patch.object(self.app, '_account_switched', return_value=False), \
              patch.object(self.app, '_is_user_away', return_value=False), \
              patch.object(self.app, '_seconds_until_next_reset', return_value=None), \
-             patch('usage_monitor_for_codex.app.time.sleep', side_effect=sleep_side_effect), \
-             patch('usage_monitor_for_codex.app.read_access_token', side_effect=['tok-a', 'tok-b', 'tok-b']):
+             patch('usage_monitor_for_copilot.app.time.sleep', side_effect=sleep_side_effect), \
+             patch('usage_monitor_for_copilot.app.read_access_token', side_effect=['tok-a', 'tok-b', 'tok-b']):
             self.app.poll_loop()
 
         # Only the initial cadence poll ran; the same-account token change forced nothing.
         self.assertEqual(force_calls, [False])
 
-    @patch('usage_monitor_for_codex.app.time.sleep')
-    @patch('usage_monitor_for_codex.app.time.time', return_value=100.0)
+    @patch('usage_monitor_for_copilot.app.time.sleep')
+    @patch('usage_monitor_for_copilot.app.time.time', return_value=100.0)
     def test_token_change_retries_after_auth_error(self, _mock_time, _mock_sleep):
         """A token change while the last fetch failed auth triggers an immediate retry."""
         self.app._last_response = {'error': 'expired', 'auth_error': True}
@@ -2748,13 +2361,13 @@ class TestPollLoopAccountSwitch(unittest.TestCase):
              patch.object(self.app, '_account_switched', return_value=False), \
              patch.object(self.app, '_is_user_away', return_value=False), \
              patch.object(self.app, '_seconds_until_next_reset', return_value=None), \
-             patch('usage_monitor_for_codex.app.read_access_token', side_effect=['tok-a', 'tok-b', 'tok-b', 'tok-b']):
+             patch('usage_monitor_for_copilot.app.read_access_token', side_effect=['tok-a', 'tok-b', 'tok-b', 'tok-b']):
             self.app.poll_loop()
 
         # Initial error poll, then an immediate (non-forced) retry on the new token.
         self.assertEqual(force_calls, [False, False])
 
-    @patch('usage_monitor_for_codex.app.time.time', return_value=100.0)
+    @patch('usage_monitor_for_copilot.app.time.time', return_value=100.0)
     def test_switch_during_update_forces_next_poll(self, _mock_time):
         """A switch landing while the fetch is in flight still forces an immediate update.
 
@@ -2783,8 +2396,8 @@ class TestPollLoopAccountSwitch(unittest.TestCase):
              patch.object(self.app, '_account_switched', return_value=True), \
              patch.object(self.app, '_is_user_away', return_value=False), \
              patch.object(self.app, '_seconds_until_next_reset', return_value=None), \
-             patch('usage_monitor_for_codex.app.time.sleep', side_effect=sleep_side_effect), \
-             patch('usage_monitor_for_codex.app.read_access_token', side_effect=lambda: 'tok-b' if switched else 'tok-a'):
+             patch('usage_monitor_for_copilot.app.time.sleep', side_effect=sleep_side_effect), \
+             patch('usage_monitor_for_copilot.app.read_access_token', side_effect=lambda: 'tok-b' if switched else 'tok-a'):
             self.app.poll_loop()
 
         self.assertEqual(force_calls, [False, True])
@@ -2799,7 +2412,7 @@ class TestAccountSwitchDetection(unittest.TestCase):
 
     def setUp(self):
         self.app = _make_app()
-        self._cmd_patch = patch('usage_monitor_for_codex.app.run_event_command')
+        self._cmd_patch = patch('usage_monitor_for_copilot.app.run_event_command')
         self._cmd_patch.start()
 
     def tearDown(self):
@@ -2813,11 +2426,11 @@ class TestAccountSwitchDetection(unittest.TestCase):
         mock.profile = {'account': {'uuid': uuid, 'email': email}}
         return mock
 
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='tooltip')
+    @patch('usage_monitor_for_copilot.app.create_icon_image')
     def test_account_switch_shows_notification(self, _icon, _tooltip):
         """Notification fires when account UUID changes between updates."""
-        data = {'five_hour': {'utilization': 10.0}}
+        data = {'chat': {'utilization': 10.0}}
         self.app._prev_account_uuid = 'uuid-old'
         self.app.cache = self._make_cache_mock('uuid-new', 'new@example.com', data)
 
@@ -2827,23 +2440,23 @@ class TestAccountSwitchDetection(unittest.TestCase):
         args = self.app.icon.notify.call_args[0]
         self.assertIn('new@example.com', args[0])
 
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='tooltip')
+    @patch('usage_monitor_for_copilot.app.create_icon_image')
     def test_no_notification_on_first_update(self, _icon, _tooltip):
         """No account switch notification on first update (_prev_account_uuid is None)."""
-        data = {'five_hour': {'utilization': 10.0}}
+        data = {'chat': {'utilization': 10.0}}
         self.app.cache = self._make_cache_mock('uuid-1', 'user@example.com', data)
 
         self.app.update()
 
         self.app.icon.notify.assert_not_called()
 
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='tooltip')
+    @patch('usage_monitor_for_copilot.app.create_icon_image')
     def test_account_switch_clears_prev_utilization(self, _icon, _tooltip):
         """Account switch resets _prev_utilization to prevent false reset notifications."""
-        data = {'five_hour': {'utilization': 5.0}, 'seven_day': {'utilization': 5.0}}
-        self.app._prev_utilization = {'five_hour': 97.0, 'seven_day': 99.0}
+        data = {'chat': {'utilization': 5.0}, 'completions': {'utilization': 5.0}}
+        self.app._prev_utilization = {'chat': 97.0, 'completions': 99.0}
         self.app._prev_account_uuid = 'uuid-old'
         self.app.cache = self._make_cache_mock('uuid-new', 'new@example.com', data)
 
@@ -2852,12 +2465,12 @@ class TestAccountSwitchDetection(unittest.TestCase):
         # prev_utilization must be cleared so reset detection cannot fire on next cycle
         self.assertEqual(self.app._prev_utilization, {})
 
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='tooltip')
+    @patch('usage_monitor_for_copilot.app.create_icon_image')
     def test_account_switch_clears_notified_thresholds(self, _icon, _tooltip):
         """Account switch resets _notified_thresholds so threshold alerts re-arm for new account."""
-        data = {'five_hour': {'utilization': 85.0}}
-        self.app._notified_thresholds = {'five_hour': 80.0}
+        data = {'chat': {'utilization': 85.0}}
+        self.app._notified_thresholds = {'chat': 80.0}
         self.app._prev_account_uuid = 'uuid-old'
         self.app.cache = self._make_cache_mock('uuid-new', 'new@example.com', data)
 
@@ -2865,13 +2478,13 @@ class TestAccountSwitchDetection(unittest.TestCase):
 
         self.assertEqual(self.app._notified_thresholds, {})
 
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='tooltip')
+    @patch('usage_monitor_for_copilot.app.create_icon_image')
     def test_account_switch_no_reset_notification(self, _icon, _tooltip):
         """No quota reset notification fires when account switches (even if utilization dropped from high)."""
         # Old account was near limit; new account has low utilization
-        data = {'five_hour': {'utilization': 5.0}, 'seven_day': {'utilization': 5.0}}
-        self.app._prev_utilization = {'five_hour': 97.0, 'seven_day': 99.0}
+        data = {'chat': {'utilization': 5.0}, 'completions': {'utilization': 5.0}}
+        self.app._prev_utilization = {'chat': 97.0, 'completions': 99.0}
         self.app._prev_account_uuid = 'uuid-old'
         self.app.cache = self._make_cache_mock('uuid-new', 'new@example.com', data)
 
@@ -2882,11 +2495,11 @@ class TestAccountSwitchDetection(unittest.TestCase):
         title_arg = self.app.icon.notify.call_args[0][1]
         self.assertNotIn('Reset', title_arg)
 
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='tooltip')
+    @patch('usage_monitor_for_copilot.app.create_icon_image')
     def test_same_account_no_notification(self, _icon, _tooltip):
         """No account switch notification when UUID is unchanged."""
-        data = {'five_hour': {'utilization': 50.0}}
+        data = {'chat': {'utilization': 50.0}}
         self.app._prev_account_uuid = 'uuid-same'
         self.app.cache = self._make_cache_mock('uuid-same', 'user@example.com', data)
 
@@ -2895,12 +2508,12 @@ class TestAccountSwitchDetection(unittest.TestCase):
 
         self.app.icon.notify.assert_not_called()
 
-    @patch('usage_monitor_for_codex.app.is_workstation_locked', return_value=True)
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
+    @patch('usage_monitor_for_copilot.app.is_workstation_locked', return_value=True)
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='tooltip')
+    @patch('usage_monitor_for_copilot.app.create_icon_image')
     def test_account_switch_notification_deferred_while_idle(self, _icon, _tooltip, _locked):
         """Account switch notification is deferred when user is away."""
-        data = {'five_hour': {'utilization': 10.0}}
+        data = {'chat': {'utilization': 10.0}}
         self.app._prev_account_uuid = 'uuid-old'
         self.app.cache = self._make_cache_mock('uuid-new', 'new@example.com', data)
 
@@ -2909,11 +2522,11 @@ class TestAccountSwitchDetection(unittest.TestCase):
         self.app.icon.notify.assert_not_called()
         self.assertIn('account_switched', self.app._deferred_notifications)
 
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='tooltip')
+    @patch('usage_monitor_for_copilot.app.create_icon_image')
     def test_account_switch_updates_prev_account_uuid(self, _icon, _tooltip):
         """After account switch, _prev_account_uuid is updated to the new UUID."""
-        data = {'five_hour': {'utilization': 10.0}}
+        data = {'chat': {'utilization': 10.0}}
         self.app._prev_account_uuid = 'uuid-old'
         self.app.cache = self._make_cache_mock('uuid-new', 'new@example.com', data)
 
@@ -2921,11 +2534,11 @@ class TestAccountSwitchDetection(unittest.TestCase):
 
         self.assertEqual(self.app._prev_account_uuid, 'uuid-new')
 
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='tooltip')
+    @patch('usage_monitor_for_copilot.app.create_icon_image')
     def test_no_notification_when_profile_unavailable(self, _icon, _tooltip):
         """No account switch notification when profile could not be loaded (UUID unknown)."""
-        data = {'five_hour': {'utilization': 10.0}}
+        data = {'chat': {'utilization': 10.0}}
         self.app._prev_account_uuid = 'uuid-old'
         mock = MagicMock()
         mock.update.return_value = UpdateResult(data=data)
@@ -2937,11 +2550,11 @@ class TestAccountSwitchDetection(unittest.TestCase):
 
         self.app.icon.notify.assert_not_called()
 
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='tooltip')
+    @patch('usage_monitor_for_copilot.app.create_icon_image')
     def test_profile_failure_keeps_account_baseline(self, _icon, _tooltip):
         """A failed profile fetch must not wipe the known account UUID baseline."""
-        data = {'five_hour': {'utilization': 10.0}}
+        data = {'chat': {'utilization': 10.0}}
         self.app._prev_account_uuid = 'uuid-old'
         mock = MagicMock()
         mock.update.return_value = UpdateResult(data=data)
@@ -2952,22 +2565,22 @@ class TestAccountSwitchDetection(unittest.TestCase):
 
         self.assertEqual(self.app._prev_account_uuid, 'uuid-old')
 
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='tooltip')
+    @patch('usage_monitor_for_copilot.app.create_icon_image')
     def test_switch_detected_after_transient_profile_failure(self, _icon, _tooltip):
         """An account switch is still detected when the profile fetch failed once in between."""
         self.app._prev_account_uuid = 'uuid-old'
-        self.app._prev_utilization = {'five_hour': 97.0}
+        self.app._prev_utilization = {'chat': 97.0}
 
         # Poll during the switch: usage OK, profile fetch failed
         mock = MagicMock()
-        mock.update.return_value = UpdateResult(data={'five_hour': {'utilization': 5.0}})
+        mock.update.return_value = UpdateResult(data={'chat': {'utilization': 5.0}})
         mock.profile = None
         self.app.cache = mock
         self.app.update()
 
         # Next poll: profile is back and reports the new account
-        self.app.cache = self._make_cache_mock('uuid-new', 'new@example.com', {'five_hour': {'utilization': 5.0}})
+        self.app.cache = self._make_cache_mock('uuid-new', 'new@example.com', {'chat': {'utilization': 5.0}})
         self.app.update()
 
         self.app.icon.notify.assert_called_once()
@@ -2975,11 +2588,11 @@ class TestAccountSwitchDetection(unittest.TestCase):
         self.assertEqual(self.app._prev_account_uuid, 'uuid-new')
         self.assertEqual(self.app._prev_utilization, {})
 
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='tooltip')
+    @patch('usage_monitor_for_copilot.app.create_icon_image')
     def test_null_account_in_profile_does_not_crash(self, _icon, _tooltip):
         """A profile response with account: null must not crash the poll thread."""
-        data = {'five_hour': {'utilization': 10.0}}
+        data = {'chat': {'utilization': 10.0}}
         self.app._prev_account_uuid = 'uuid-old'
         mock = MagicMock()
         mock.update.return_value = UpdateResult(data=data)
@@ -2991,13 +2604,13 @@ class TestAccountSwitchDetection(unittest.TestCase):
         self.app.icon.notify.assert_not_called()
         self.assertEqual(self.app._prev_account_uuid, 'uuid-old')
 
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='tooltip')
+    @patch('usage_monitor_for_copilot.app.create_icon_image')
     def test_no_reset_notification_while_account_identity_unknown(self, _icon, _tooltip):
         """A usage drop is not reported as a quota reset while the profile is unknown -
         the data may already belong to a different account."""
-        data = {'five_hour': {'utilization': 5.0}}
-        self.app._prev_utilization = {'five_hour': 97.0}
+        data = {'chat': {'utilization': 5.0}}
+        self.app._prev_utilization = {'chat': 97.0}
         self.app._prev_account_uuid = 'uuid-old'
         mock = MagicMock()
         mock.update.return_value = UpdateResult(data=data)
@@ -3009,11 +2622,11 @@ class TestAccountSwitchDetection(unittest.TestCase):
         self.app.icon.notify.assert_not_called()
         # The old baseline is kept so the comparison can resume once the
         # account identity is known again.
-        self.assertEqual(self.app._prev_utilization, {'five_hour': 97.0})
+        self.assertEqual(self.app._prev_utilization, {'chat': 97.0})
 
-    @patch('usage_monitor_for_codex.app.read_access_token', return_value='tok-new')
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
+    @patch('usage_monitor_for_copilot.app.read_access_token', return_value='tok-new')
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='tooltip')
+    @patch('usage_monitor_for_copilot.app.create_icon_image')
     def test_switch_during_fetch_defers_detection(self, _icon, _tooltip, _token):
         """Usage fetched before the switch is not paired with the new account's profile.
 
@@ -3021,9 +2634,9 @@ class TestAccountSwitchDetection(unittest.TestCase):
         the old account's numbers and burn the UUID baseline, so the stale
         data would survive until the next regular poll.
         """
-        data = {'five_hour': {'utilization': 10.0}}
+        data = {'chat': {'utilization': 10.0}}
         self.app._prev_account_uuid = 'uuid-old'
-        self.app._prev_utilization = {'five_hour': 97.0}
+        self.app._prev_utilization = {'chat': 97.0}
         mock = self._make_cache_mock('uuid-new', 'new@example.com', data)
         mock.update.return_value = UpdateResult(data=data, token='tok-old')
         self.app.cache = mock
@@ -3034,23 +2647,23 @@ class TestAccountSwitchDetection(unittest.TestCase):
         mock.ensure_profile.assert_not_called()
         # Baselines stay untouched so the refetch on the new token detects the switch.
         self.assertEqual(self.app._prev_account_uuid, 'uuid-old')
-        self.assertEqual(self.app._prev_utilization, {'five_hour': 97.0})
+        self.assertEqual(self.app._prev_utilization, {'chat': 97.0})
 
-    @patch('usage_monitor_for_codex.app.read_access_token', return_value='tok-new')
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
+    @patch('usage_monitor_for_copilot.app.read_access_token', return_value='tok-new')
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='tooltip')
+    @patch('usage_monitor_for_copilot.app.create_icon_image')
     def test_switch_reported_once_refetched_on_new_token(self, _icon, _tooltip, _token):
         """The refetch on the new token reports the switch together with its usage data."""
         self.app._prev_account_uuid = 'uuid-old'
 
         # Poll whose fetch still used the old token - deferred.
-        stale = self._make_cache_mock('uuid-new', 'new@example.com', {'five_hour': {'utilization': 90.0}})
-        stale.update.return_value = UpdateResult(data={'five_hour': {'utilization': 90.0}}, token='tok-old')
+        stale = self._make_cache_mock('uuid-new', 'new@example.com', {'chat': {'utilization': 90.0}})
+        stale.update.return_value = UpdateResult(data={'chat': {'utilization': 90.0}}, token='tok-old')
         self.app.cache = stale
         self.app.update()
 
         # Forced refetch on the new token.
-        fresh_data = {'five_hour': {'utilization': 3.0}}
+        fresh_data = {'chat': {'utilization': 3.0}}
         fresh = self._make_cache_mock('uuid-new', 'new@example.com', fresh_data)
         fresh.update.return_value = UpdateResult(data=fresh_data, token='tok-new')
         self.app.cache = fresh
@@ -3061,9 +2674,9 @@ class TestAccountSwitchDetection(unittest.TestCase):
         self.assertEqual(self.app._last_response, fresh_data)
         self.assertEqual(self.app._prev_account_uuid, 'uuid-new')
 
-    @patch('usage_monitor_for_codex.app.read_access_token', return_value=None)
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
+    @patch('usage_monitor_for_copilot.app.read_access_token', return_value=None)
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='tooltip')
+    @patch('usage_monitor_for_copilot.app.create_icon_image')
     def test_unreadable_credentials_defer_detection(self, _icon, _tooltip, _token):
         """An unreadable credentials file defers the comparison instead of guessing.
 
@@ -3071,7 +2684,7 @@ class TestAccountSwitchDetection(unittest.TestCase):
         that window returns no token - which account the data belongs to is
         unknown until the next poll.
         """
-        data = {'five_hour': {'utilization': 10.0}}
+        data = {'chat': {'utilization': 10.0}}
         self.app._prev_account_uuid = 'uuid-old'
         mock = self._make_cache_mock('uuid-new', 'new@example.com', data)
         mock.update.return_value = UpdateResult(data=data, token='tok-old')
@@ -3082,12 +2695,12 @@ class TestAccountSwitchDetection(unittest.TestCase):
         self.app.icon.notify.assert_not_called()
         self.assertEqual(self.app._prev_account_uuid, 'uuid-old')
 
-    @patch('usage_monitor_for_codex.app.read_access_token', return_value='tok-a')
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
+    @patch('usage_monitor_for_copilot.app.read_access_token', return_value='tok-a')
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='tooltip')
+    @patch('usage_monitor_for_copilot.app.create_icon_image')
     def test_unchanged_token_is_evaluated_normally(self, _icon, _tooltip, _token):
         """A fetch on the token still in the credentials file is compared as usual."""
-        data = {'five_hour': {'utilization': 10.0}}
+        data = {'chat': {'utilization': 10.0}}
         self.app._prev_account_uuid = 'uuid-old'
         mock = self._make_cache_mock('uuid-new', 'new@example.com', data)
         mock.update.return_value = UpdateResult(data=data, token='tok-a')
@@ -3198,15 +2811,15 @@ class TestStartupCommand(unittest.TestCase):
     def tearDown(self):
         _cleanup(self.app)
 
-    @patch('usage_monitor_for_codex.app.ON_STARTUP_COMMAND', ['echo startup'])
-    @patch('usage_monitor_for_codex.app.run_event_command')
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
+    @patch('usage_monitor_for_copilot.app.ON_STARTUP_COMMAND', ['echo startup'])
+    @patch('usage_monitor_for_copilot.app.run_event_command')
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='tooltip')
+    @patch('usage_monitor_for_copilot.app.create_icon_image')
     def test_fires_on_first_successful_update(self, _icon, _tooltip, mock_cmd):
         """Startup command fires once on the first successful update."""
         data = {
-            'five_hour': {'utilization': 0.0, 'resets_at': None},
-            'seven_day': {'utilization': 45.0, 'resets_at': '2025-01-20T12:00:00Z'},
+            'chat': {'utilization': 0.0, 'resets_at': None},
+            'completions': {'utilization': 45.0, 'resets_at': '2025-01-20T12:00:00Z'},
         }
         self.app.cache.update.return_value = UpdateResult(data=data)
 
@@ -3216,20 +2829,20 @@ class TestStartupCommand(unittest.TestCase):
         cmd, env = mock_cmd.call_args[0]
         self.assertEqual(cmd, ['echo startup'])
         self.assertEqual(env['USAGE_MONITOR_EVENT'], 'startup')
-        self.assertEqual(env['USAGE_MONITOR_UTILIZATION_FIVE_HOUR'], '0')
-        self.assertEqual(env['USAGE_MONITOR_RESETS_AT_FIVE_HOUR'], '')
-        self.assertEqual(env['USAGE_MONITOR_UTILIZATION_SEVEN_DAY'], '45')
-        self.assertEqual(env['USAGE_MONITOR_RESETS_AT_SEVEN_DAY'], '2025-01-20T12:00:00Z')
+        self.assertEqual(env['USAGE_MONITOR_UTILIZATION_CHAT'], '0')
+        self.assertEqual(env['USAGE_MONITOR_RESETS_AT_CHAT'], '')
+        self.assertEqual(env['USAGE_MONITOR_UTILIZATION_COMPLETIONS'], '45')
+        self.assertEqual(env['USAGE_MONITOR_RESETS_AT_COMPLETIONS'], '2025-01-20T12:00:00Z')
         # Startup fires automatically (not user-driven), so it stays silent.
         self.assertFalse(mock_cmd.call_args[1].get('capture_output'))
 
-    @patch('usage_monitor_for_codex.app.ON_STARTUP_COMMAND', ['echo startup'])
-    @patch('usage_monitor_for_codex.app.run_event_command')
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
+    @patch('usage_monitor_for_copilot.app.ON_STARTUP_COMMAND', ['echo startup'])
+    @patch('usage_monitor_for_copilot.app.run_event_command')
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='tooltip')
+    @patch('usage_monitor_for_copilot.app.create_icon_image')
     def test_fires_only_once_across_multiple_updates(self, _icon, _tooltip, mock_cmd):
         """Startup command does not fire again on subsequent updates."""
-        data = {'five_hour': {'utilization': 0.0}, 'seven_day': {'utilization': 10.0}}
+        data = {'chat': {'utilization': 0.0}, 'completions': {'utilization': 10.0}}
         self.app.cache.update.return_value = UpdateResult(data=data)
 
         self.app.update()
@@ -3238,23 +2851,23 @@ class TestStartupCommand(unittest.TestCase):
 
         mock_cmd.assert_called_once()
 
-    @patch('usage_monitor_for_codex.app.ON_STARTUP_COMMAND', [])
-    @patch('usage_monitor_for_codex.app.run_event_command')
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
+    @patch('usage_monitor_for_copilot.app.ON_STARTUP_COMMAND', [])
+    @patch('usage_monitor_for_copilot.app.run_event_command')
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='tooltip')
+    @patch('usage_monitor_for_copilot.app.create_icon_image')
     def test_no_fire_when_command_unset(self, _icon, _tooltip, mock_cmd):
         """Startup command is not invoked when ON_STARTUP_COMMAND is empty."""
-        data = {'five_hour': {'utilization': 0.0}, 'seven_day': {'utilization': 10.0}}
+        data = {'chat': {'utilization': 0.0}, 'completions': {'utilization': 10.0}}
         self.app.cache.update.return_value = UpdateResult(data=data)
 
         self.app.update()
 
         mock_cmd.assert_not_called()
 
-    @patch('usage_monitor_for_codex.app.ON_STARTUP_COMMAND', ['echo startup'])
-    @patch('usage_monitor_for_codex.app.run_event_command')
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
+    @patch('usage_monitor_for_copilot.app.ON_STARTUP_COMMAND', ['echo startup'])
+    @patch('usage_monitor_for_copilot.app.run_event_command')
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='tooltip')
+    @patch('usage_monitor_for_copilot.app.create_icon_image')
     def test_no_fire_on_error_response(self, _icon, _tooltip, mock_cmd):
         """Startup command is skipped when the first update returns an error."""
         self.app.cache.update.return_value = UpdateResult(data={'error': 'connection failed'})
@@ -3264,13 +2877,13 @@ class TestStartupCommand(unittest.TestCase):
         mock_cmd.assert_not_called()
         self.assertFalse(self.app._first_update_done)
 
-    @patch('usage_monitor_for_codex.app.ON_STARTUP_COMMAND', ['echo startup'])
-    @patch('usage_monitor_for_codex.app.run_event_command')
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
+    @patch('usage_monitor_for_copilot.app.ON_STARTUP_COMMAND', ['echo startup'])
+    @patch('usage_monitor_for_copilot.app.run_event_command')
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='tooltip')
+    @patch('usage_monitor_for_copilot.app.create_icon_image')
     def test_fires_after_initial_error_then_success(self, _icon, _tooltip, mock_cmd):
         """Startup command fires on the first SUCCESSFUL update, even after errors."""
-        ok_data = {'five_hour': {'utilization': 0.0}, 'seven_day': {'utilization': 10.0}}
+        ok_data = {'chat': {'utilization': 0.0}, 'completions': {'utilization': 10.0}}
         self.app.cache.update.side_effect = [
             UpdateResult(data={'error': 'offline'}),
             UpdateResult(data=ok_data),
@@ -3283,79 +2896,24 @@ class TestStartupCommand(unittest.TestCase):
         self.assertEqual(mock_cmd.call_count, 1)
         self.assertEqual(mock_cmd.call_args[0][1]['USAGE_MONITOR_EVENT'], 'startup')
 
-    @patch('usage_monitor_for_codex.app.ON_STARTUP_COMMAND', ['echo startup'])
-    @patch('usage_monitor_for_codex.app.run_event_command')
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
-    def test_extra_usage_env_vars_when_enabled(self, _icon, _tooltip, mock_cmd):
-        """Extra usage env vars are emitted when extra_usage is enabled."""
-        data = {
-            'five_hour': {'utilization': 10.0, 'resets_at': '2025-01-15T18:00:00Z'},
-            'extra_usage': {'is_enabled': True, 'used_credits': 8.20, 'monthly_limit': 10.0},
-        }
-        self.app.cache.update.return_value = UpdateResult(data=data)
-
-        self.app.update()
-
-        env = mock_cmd.call_args[0][1]
-        self.assertIn('USAGE_MONITOR_EXTRA_USED', env)
-        self.assertIn('USAGE_MONITOR_EXTRA_LIMIT', env)
-        self.assertNotIn('USAGE_MONITOR_UTILIZATION_EXTRA_USAGE', env)
-
-    @patch('usage_monitor_for_codex.app.ON_STARTUP_COMMAND', ['echo startup'])
-    @patch('usage_monitor_for_codex.app.run_event_command')
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
-    def test_extra_usage_env_omits_limit_when_uncapped(self, _icon, _tooltip, mock_cmd):
-        """USAGE_MONITOR_EXTRA_LIMIT is omitted when extra usage has no monthly limit."""
-        data = {
-            'five_hour': {'utilization': 10.0, 'resets_at': '2025-01-15T18:00:00Z'},
-            'extra_usage': {'is_enabled': True, 'used_credits': 8.20, 'monthly_limit': None},
-        }
-        self.app.cache.update.return_value = UpdateResult(data=data)
-
-        self.app.update()
-
-        env = mock_cmd.call_args[0][1]
-        self.assertIn('USAGE_MONITOR_EXTRA_USED', env)
-        self.assertNotIn('USAGE_MONITOR_EXTRA_LIMIT', env)
-
-    @patch('usage_monitor_for_codex.app.ON_STARTUP_COMMAND', ['echo startup'])
-    @patch('usage_monitor_for_codex.app.run_event_command')
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
-    def test_no_extra_usage_env_vars_when_disabled(self, _icon, _tooltip, mock_cmd):
-        """Extra usage env vars are not emitted when extra_usage is disabled."""
-        data = {
-            'five_hour': {'utilization': 10.0},
-            'extra_usage': {'is_enabled': False, 'used_credits': 0, 'monthly_limit': 0},
-        }
-        self.app.cache.update.return_value = UpdateResult(data=data)
-
-        self.app.update()
-
-        env = mock_cmd.call_args[0][1]
-        self.assertNotIn('USAGE_MONITOR_EXTRA_USED', env)
-        self.assertNotIn('USAGE_MONITOR_EXTRA_LIMIT', env)
-
-    @patch('usage_monitor_for_codex.app.ON_STARTUP_COMMAND', ['echo startup'])
-    @patch('usage_monitor_for_codex.app.run_event_command')
-    @patch('usage_monitor_for_codex.app.format_tooltip', return_value='tooltip')
-    @patch('usage_monitor_for_codex.app.create_icon_image')
+    @patch('usage_monitor_for_copilot.app.ON_STARTUP_COMMAND', ['echo startup'])
+    @patch('usage_monitor_for_copilot.app.run_event_command')
+    @patch('usage_monitor_for_copilot.app.format_tooltip', return_value='tooltip')
+    @patch('usage_monitor_for_copilot.app.create_icon_image')
     def test_handles_null_quota_field(self, _icon, _tooltip, mock_cmd):
         """Quota fields with value None (feature not enabled) are skipped without error."""
-        data = {'five_hour': {'utilization': 10.0}, 'seven_day': None}
+        data = {'chat': {'utilization': 10.0}, 'completions': None}
         self.app.cache.update.return_value = UpdateResult(data=data)
 
         self.app.update()
 
         mock_cmd.assert_called_once()
         env = mock_cmd.call_args[0][1]
-        self.assertIn('USAGE_MONITOR_UTILIZATION_FIVE_HOUR', env)
-        self.assertNotIn('USAGE_MONITOR_UTILIZATION_SEVEN_DAY', env)
+        self.assertIn('USAGE_MONITOR_UTILIZATION_CHAT', env)
+        self.assertNotIn('USAGE_MONITOR_UTILIZATION_COMPLETIONS', env)
 
-    @patch('usage_monitor_for_codex.app.ON_STARTUP_COMMAND', ['echo startup'])
-    @patch('usage_monitor_for_codex.app.run_event_command')
+    @patch('usage_monitor_for_copilot.app.ON_STARTUP_COMMAND', ['echo startup'])
+    @patch('usage_monitor_for_copilot.app.run_event_command')
     def test_test_menu_handler_passes_expected_env(self, mock_cmd):
         """on_test_startup passes the documented env vars."""
         self.app.on_test_startup()
@@ -3364,9 +2922,10 @@ class TestStartupCommand(unittest.TestCase):
         cmd, env = mock_cmd.call_args[0]
         self.assertEqual(cmd, ['echo startup'])
         self.assertEqual(env['USAGE_MONITOR_EVENT'], 'startup')
-        self.assertEqual(env['USAGE_MONITOR_RESETS_AT_FIVE_HOUR'], '')
-        self.assertEqual(env['USAGE_MONITOR_UTILIZATION_FIVE_HOUR'], '0')
-        self.assertNotEqual(env['USAGE_MONITOR_RESETS_AT_SEVEN_DAY'], '')
+        self.assertEqual(env['USAGE_MONITOR_UTILIZATION_PREMIUM_INTERACTIONS'], '45')
+        # resets_at is always '' for Copilot - unlike the Claude/Codex twin,
+        # there is no second field here with a future timestamp to contrast it against.
+        self.assertEqual(env['USAGE_MONITOR_RESETS_AT_PREMIUM_INTERACTIONS'], '')
 
 
 # ---------------------------------------------------------------------------
@@ -3382,13 +2941,13 @@ class TestDoubleClickCommand(unittest.TestCase):
     def tearDown(self):
         _cleanup(self.app)
 
-    @patch('usage_monitor_for_codex.app.QUICK_ACTION_COMMAND', ['run.exe'])
-    @patch('usage_monitor_for_codex.app.run_event_command')
+    @patch('usage_monitor_for_copilot.app.QUICK_ACTION_COMMAND', ['run.exe'])
+    @patch('usage_monitor_for_copilot.app.run_event_command')
     def test_fires_with_current_quota_snapshot(self, mock_cmd):
         """Double-click command fires with env vars from the latest response."""
         self.app._last_response = {
-            'five_hour': {'utilization': 30.0, 'resets_at': '2025-01-15T18:00:00Z'},
-            'seven_day': {'utilization': 55.0, 'resets_at': '2025-01-20T12:00:00Z'},
+            'chat': {'utilization': 30.0, 'resets_at': '2025-01-15T18:00:00Z'},
+            'completions': {'utilization': 55.0, 'resets_at': '2025-01-20T12:00:00Z'},
         }
 
         self.app._run_quick_action()
@@ -3397,50 +2956,50 @@ class TestDoubleClickCommand(unittest.TestCase):
         cmd, env = mock_cmd.call_args[0]
         self.assertEqual(cmd, ['run.exe'])
         self.assertEqual(env['USAGE_MONITOR_EVENT'], 'quick_action')
-        self.assertEqual(env['USAGE_MONITOR_UTILIZATION_FIVE_HOUR'], '30')
-        self.assertEqual(env['USAGE_MONITOR_RESETS_AT_FIVE_HOUR'], '2025-01-15T18:00:00Z')
-        self.assertEqual(env['USAGE_MONITOR_UTILIZATION_SEVEN_DAY'], '55')
+        self.assertEqual(env['USAGE_MONITOR_UTILIZATION_CHAT'], '30')
+        self.assertEqual(env['USAGE_MONITOR_RESETS_AT_CHAT'], '2025-01-15T18:00:00Z')
+        self.assertEqual(env['USAGE_MONITOR_UTILIZATION_COMPLETIONS'], '55')
 
-    @patch('usage_monitor_for_codex.app.QUICK_ACTION_COMMAND', ['run.exe'])
-    @patch('usage_monitor_for_codex.app.run_event_command')
+    @patch('usage_monitor_for_copilot.app.QUICK_ACTION_COMMAND', ['run.exe'])
+    @patch('usage_monitor_for_copilot.app.run_event_command')
     def test_captures_output_so_failures_surface(self, mock_cmd):
         """A double-click is user-driven, so it requests output capture (error dialog on failure)."""
-        self.app._last_response = {'five_hour': {'utilization': 10.0}}
+        self.app._last_response = {'chat': {'utilization': 10.0}}
 
         self.app._run_quick_action()
 
         self.assertTrue(mock_cmd.call_args[1].get('capture_output'))
 
-    @patch('usage_monitor_for_codex.app.QUICK_ACTION_COMMAND', ['run.exe'])
-    @patch('usage_monitor_for_codex.app.run_event_command')
+    @patch('usage_monitor_for_copilot.app.QUICK_ACTION_COMMAND', ['run.exe'])
+    @patch('usage_monitor_for_copilot.app.run_event_command')
     def test_only_startup_failures_are_reported(self, mock_cmd):
         """A late non-zero exit (crash, kill, replaced instance) must not raise a dialog long after the click."""
-        self.app._last_response = {'five_hour': {'utilization': 10.0}}
+        self.app._last_response = {'chat': {'utilization': 10.0}}
 
         self.app._run_quick_action()
 
         self.assertFalse(mock_cmd.call_args[1].get('report_late_failures', True))
 
-    @patch('usage_monitor_for_codex.app.QUICK_ACTION_COMMAND', ['run.exe'])
-    @patch('usage_monitor_for_codex.app.run_event_command')
+    @patch('usage_monitor_for_copilot.app.QUICK_ACTION_COMMAND', ['run.exe'])
+    @patch('usage_monitor_for_copilot.app.run_event_command')
     def test_test_menu_handler_reports_late_failures(self, mock_cmd):
         """The 'Test event commands' menu keeps full reporting - there the exit code is the point."""
         self.app.on_test_quick_action()
 
         self.assertTrue(mock_cmd.call_args[1].get('report_late_failures', True))
 
-    @patch('usage_monitor_for_codex.app.QUICK_ACTION_COMMAND', [])
-    @patch('usage_monitor_for_codex.app.run_event_command')
+    @patch('usage_monitor_for_copilot.app.QUICK_ACTION_COMMAND', [])
+    @patch('usage_monitor_for_copilot.app.run_event_command')
     def test_no_fire_when_command_unset(self, mock_cmd):
         """No command runs when QUICK_ACTION_COMMAND is empty."""
-        self.app._last_response = {'five_hour': {'utilization': 30.0}}
+        self.app._last_response = {'chat': {'utilization': 30.0}}
 
         self.app._run_quick_action()
 
         mock_cmd.assert_not_called()
 
-    @patch('usage_monitor_for_codex.app.QUICK_ACTION_COMMAND', ['run.exe'])
-    @patch('usage_monitor_for_codex.app.run_event_command')
+    @patch('usage_monitor_for_copilot.app.QUICK_ACTION_COMMAND', ['run.exe'])
+    @patch('usage_monitor_for_copilot.app.run_event_command')
     def test_empty_response_emits_only_event(self, mock_cmd):
         """Double-clicking before any data yields only the event var."""
         self.app._last_response = {}
@@ -3449,10 +3008,10 @@ class TestDoubleClickCommand(unittest.TestCase):
 
         env = mock_cmd.call_args[0][1]
         self.assertEqual(env['USAGE_MONITOR_EVENT'], 'quick_action')
-        self.assertNotIn('USAGE_MONITOR_UTILIZATION_FIVE_HOUR', env)
+        self.assertNotIn('USAGE_MONITOR_UTILIZATION_CHAT', env)
 
-    @patch('usage_monitor_for_codex.app.QUICK_ACTION_COMMAND', ['run.exe'])
-    @patch('usage_monitor_for_codex.app.run_event_command')
+    @patch('usage_monitor_for_copilot.app.QUICK_ACTION_COMMAND', ['run.exe'])
+    @patch('usage_monitor_for_copilot.app.run_event_command')
     def test_error_response_emits_only_event(self, mock_cmd):
         """An error response contributes no quota vars."""
         self.app._last_response = {'error': 'server down', 'auth_error': True}
@@ -3463,24 +3022,8 @@ class TestDoubleClickCommand(unittest.TestCase):
         self.assertEqual(env['USAGE_MONITOR_EVENT'], 'quick_action')
         self.assertFalse([k for k in env if k.startswith('USAGE_MONITOR_UTILIZATION')])
 
-    @patch('usage_monitor_for_codex.app.QUICK_ACTION_COMMAND', ['run.exe'])
-    @patch('usage_monitor_for_codex.app.run_event_command')
-    def test_extra_usage_env_vars_when_enabled(self, mock_cmd):
-        """Extra usage credit vars are included when enabled."""
-        self.app._last_response = {
-            'five_hour': {'utilization': 10.0},
-            'extra_usage': {'is_enabled': True, 'used_credits': 8.20, 'monthly_limit': 10.0},
-        }
-
-        self.app._run_quick_action()
-
-        env = mock_cmd.call_args[0][1]
-        self.assertIn('USAGE_MONITOR_EXTRA_USED', env)
-        self.assertIn('USAGE_MONITOR_EXTRA_LIMIT', env)
-        self.assertNotIn('USAGE_MONITOR_UTILIZATION_EXTRA_USAGE', env)
-
-    @patch('usage_monitor_for_codex.app.QUICK_ACTION_COMMAND', ['run.exe'])
-    @patch('usage_monitor_for_codex.app.run_event_command')
+    @patch('usage_monitor_for_copilot.app.QUICK_ACTION_COMMAND', ['run.exe'])
+    @patch('usage_monitor_for_copilot.app.run_event_command')
     def test_test_menu_handler_passes_expected_env(self, mock_cmd):
         """on_test_quick_action passes the documented sample env vars."""
         self.app.on_test_quick_action()
@@ -3489,9 +3032,10 @@ class TestDoubleClickCommand(unittest.TestCase):
         cmd, env = mock_cmd.call_args[0]
         self.assertEqual(cmd, ['run.exe'])
         self.assertEqual(env['USAGE_MONITOR_EVENT'], 'quick_action')
-        self.assertEqual(env['USAGE_MONITOR_UTILIZATION_FIVE_HOUR'], '30')
-        self.assertEqual(env['USAGE_MONITOR_UTILIZATION_SEVEN_DAY'], '55')
-        self.assertNotEqual(env['USAGE_MONITOR_RESETS_AT_FIVE_HOUR'], '')
+        self.assertEqual(env['USAGE_MONITOR_UTILIZATION_PREMIUM_INTERACTIONS'], '30')
+        # resets_at is always '' for Copilot, unlike the future timestamp the
+        # Claude/Codex twin's test fed for its second (seven_day) field.
+        self.assertEqual(env['USAGE_MONITOR_RESETS_AT_PREMIUM_INTERACTIONS'], '')
 
 
 # ---------------------------------------------------------------------------
@@ -3507,10 +3051,10 @@ class TestAutostartWiring(unittest.TestCase):
         self.addCleanup(_cleanup, app)
 
         icon = MagicMock()
-        with patch('usage_monitor_for_codex.app.autostart_supported', return_value=supported), \
-             patch('usage_monitor_for_codex.app.sync_autostart_path') as mock_sync, \
-             patch('usage_monitor_for_codex.app.api_headers', return_value={'x': 'y'}), \
-             patch('usage_monitor_for_codex.app.threading.Thread'), \
+        with patch('usage_monitor_for_copilot.app.autostart_supported', return_value=supported), \
+             patch('usage_monitor_for_copilot.app.sync_autostart_path') as mock_sync, \
+             patch('usage_monitor_for_copilot.app.api_headers', return_value={'x': 'y'}), \
+             patch('usage_monitor_for_copilot.app.threading.Thread'), \
              patch.object(app, 'poll_loop'):
             app._on_icon_ready(icon)
 
@@ -3534,16 +3078,16 @@ class TestDoubleClickWiring(unittest.TestCase):
         The settings patch stays active for the whole test: the menu
         resolves its visibility when it opens, not when it is built.
         """
-        command_patch = patch('usage_monitor_for_codex.app.QUICK_ACTION_COMMAND', command)
+        command_patch = patch('usage_monitor_for_copilot.app.QUICK_ACTION_COMMAND', command)
         command_patch.start()
         self.addCleanup(command_patch.stop)
 
-        with patch('usage_monitor_for_codex.app.pystray'), \
-             patch('usage_monitor_for_codex.app.create_icon_image'), \
-             patch('usage_monitor_for_codex.app.taskbar_uses_light_theme', return_value=False), \
-             patch('usage_monitor_for_codex.app.install_tray_click_handler', return_value=installed) as mock_install, \
+        with patch('usage_monitor_for_copilot.app.pystray'), \
+             patch('usage_monitor_for_copilot.app.create_icon_image'), \
+             patch('usage_monitor_for_copilot.app.taskbar_uses_light_theme', return_value=False), \
+             patch('usage_monitor_for_copilot.app.install_tray_click_handler', return_value=installed) as mock_install, \
              patch('builtins.print') as mock_print:
-            app = UsageMonitorForCodex()
+            app = UsageMonitorForCopilot()
 
         return app, mock_install, mock_print
 

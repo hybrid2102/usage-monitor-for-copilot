@@ -1,31 +1,33 @@
 # Privacy and security
 
-Usage Monitor for Codex is designed to keep authentication inside the official Codex CLI.
+Usage Monitor for Copilot is designed to keep authentication inside the official Copilot CLI.
 
 ## Authentication and network access
 
-The monitor starts the locally installed `codex app-server --stdio` process and exchanges JSONL messages over standard input/output. It requests account metadata and rate-limit snapshots through the documented App Server methods.
+The monitor starts the locally installed `copilot --server` process and completes its `connect` handshake over a local TCP socket, using a random connection token generated fresh for every run. This token is never written to disk and never logged; it is handed to the subprocess only through its environment (`COPILOT_CONNECTION_TOKEN`). Without it, the CLI's server would accept connections from any other local process and let it drive the Copilot agent - shell commands and file edits included - as the logged-in user. Generating and passing this token is the one thing this integration does that the monitor's Claude and Codex counterparts do not need to: those talk to their CLI over standard input/output, which no other process can reach, while `copilot --server` opens a TCP port.
+
+Once connected, the monitor requests `account.getQuota` for the current chat, code-completion, and premium-request usage snapshot.
 
 The monitor itself:
 
-- does not read Codex credential files;
+- does not read Copilot credential files (`~/.copilot`, or the directory named by `COPILOT_HOME`);
 - does not receive or store access or refresh tokens;
 - does not inspect browser cookies;
 - does not send telemetry or analytics;
 - does not contact GitHub to check for updates.
 
-The Codex subprocess communicates with OpenAI according to the Codex CLI's own authentication and privacy behavior.
+The Copilot CLI subprocess communicates with GitHub according to its own authentication and privacy behavior.
 
 ## Data held in memory
 
-While running, the application may hold the active account email, plan name, opaque account marker, usage percentages, reset timestamps, and credits metadata returned by App Server. This data is used only to render the tray icon, popup, and optional local notifications. It is not persisted by the monitor.
+While running, the application may hold per-category quota utilization, unlimited-entitlement flags, and other usage metadata returned by the Copilot CLI. This data is used only to render the tray icon, popup, and optional local notifications. It is not persisted by the monitor. The CLI's own quota reset timestamp is read but never surfaced as a countdown, because it was found to track the moment of the request rather than a real billing-cycle boundary.
 
 ## Local settings and operating-system integration
 
-Configuration is read from the project settings location, respecting `CODEX_HOME` when set. If autostart or notification identity is enabled, the application may create the normal Windows registry values or Linux desktop files required for those features.
+Configuration is read from the project settings location, respecting `COPILOT_HOME` when set. If autostart or notification identity is enabled, the application may create the normal Windows registry values or Linux desktop files required for those features. No other persistent write is made: the `copilot --server` subprocess and the connection token generated for it both exist only for the lifetime of that process and are never written to disk.
 
 Optional event commands are executed locally only when explicitly configured by the user. Their privacy and security impact depends on the commands chosen.
 
 ## Reporting issues
 
-Do not attach credential files or access tokens to issue reports. Diagnostic output should be reviewed before sharing because it can contain local paths, software versions, and account metadata.
+Do not attach credential files, access tokens, or connection tokens to issue reports. Diagnostic output should be reviewed before sharing because it can contain local paths, software versions, and account metadata.

@@ -8,9 +8,9 @@ registry keys, file paths) remain in their respective modules.
 Loads an optional ``usage-monitor-settings.json`` to let users override
 any constant.  Search order:
 
-1. ``$CODEX_HOME/usage-monitor-settings.json`` (if set and different from ``~/.codex/``)
+1. ``$COPILOT_HOME/usage-monitor-settings.json`` (if set and different from ``~/.copilot/``)
 2. Next to the executable (frozen) or project root (source)
-3. ``~/.codex/usage-monitor-settings.json``
+3. ``~/.copilot/usage-monitor-settings.json``
 
 The app never creates this file - users place it manually.
 """
@@ -30,7 +30,7 @@ __all__ = [
     'CLI_COMMAND', 'COMPACT_HIDE', 'CURRENCY_SYMBOL',
     'FG', 'FG_DIM', 'FG_HEADING', 'FG_LINK',
     'ICON_DARK', 'ICON_FIELDS', 'ICON_LIGHT', 'ICON_STYLE', 'IDLE_INTERVAL', 'IDLE_PAUSE',
-    'LANGUAGE', 'MAX_BACKOFF', 'NOTIFY_CODEX_UPDATE',
+    'LANGUAGE', 'MAX_BACKOFF', 'NOTIFY_COPILOT_UPDATE',
     'ON_RESET_COMMAND', 'ON_STARTUP_COMMAND', 'ON_THRESHOLD_COMMAND', 'QUICK_ACTION_COMMAND',
     'POLL_ERROR', 'POLL_FAST', 'POLL_FAST_EXTRA', 'POLL_INTERVAL',
     'POPUP_FIELDS', 'SETTINGS_FILENAME', 'TIME_FORMAT', 'TOOLTIP_FIELDS',
@@ -58,7 +58,7 @@ _VALID_ICON_STYLES = frozenset({'number+bars', 'numbers'})
 _COMMAND_KEYS = frozenset({
     'quick_action_command', 'on_double_click_command', 'on_reset_command', 'on_startup_command', 'on_threshold_command',
 })
-_BOOL_KEYS = frozenset({'alert_time_aware', 'notify_codex_update'})
+_BOOL_KEYS = frozenset({'alert_time_aware', 'notify_copilot_update'})
 _STRING_LIST_KEYS = frozenset({'tooltip_fields', 'compact_hide'})
 _WILDCARD_STRING_LIST_KEYS = frozenset({'popup_fields'})
 _VALID_BAR_MODES = frozenset({'utilization', 'overage'})
@@ -86,15 +86,15 @@ def _load_settings() -> dict:
     else:
         app_dir = Path(__file__).resolve().parent.parent
 
-    home_codex = Path.home() / '.codex'
+    home_copilot = Path.home() / '.copilot'
 
     # A custom config dir takes precedence over the exe-adjacent file so
-    # each instance (one per Codex account) can have its own settings.
+    # each instance (one per Copilot account) can have its own settings.
     search_paths = []
     if not is_default_config_dir():
         search_paths.append(effective_config_dir() / SETTINGS_FILENAME)
     search_paths.append(app_dir / SETTINGS_FILENAME)
-    search_paths.append(home_codex / SETTINGS_FILENAME)
+    search_paths.append(home_copilot / SETTINGS_FILENAME)
 
     for path in search_paths:
         if path.is_file():
@@ -111,7 +111,7 @@ def _load_settings() -> dict:
             except (json.JSONDecodeError, ValueError) as exc:
                 show_warning_box(
                     f'Invalid JSON in settings file:\n{path}\n\n{exc}',
-                    'Usage Monitor for Codex - Settings Error',
+                    'Usage Monitor for Copilot - Settings Error',
                 )
                 return {}
             except OSError:
@@ -121,7 +121,7 @@ def _load_settings() -> dict:
 
 
 def _valid_rgba(value: object) -> bool:
-    """Return True if *value* is a list of exactly 4 integers in 0\u2013255."""
+    """Return True if *value* is a list of exactly 4 integers in 0–255."""
     return (
         isinstance(value, list) and len(value) == 4
         and all(isinstance(c, int) and not isinstance(c, bool) and 0 <= c <= 255 for c in value)
@@ -253,8 +253,8 @@ def _validate(data: dict, path: Path) -> dict:
             if not isinstance(value, list):
                 errors.append(f'  {key}: expected an array, got {type(value).__name__}')
                 drop.append(key)
-            elif len(value) != 2:
-                errors.append(f'  {key}: expected exactly 2 entries, got {len(value)}')
+            elif len(value) not in (1, 2):
+                errors.append(f'  {key}: expected 1 or 2 entries, got {len(value)}')
                 drop.append(key)
             elif any(not isinstance(item, str) or not item for item in value):
                 errors.append(f'  {key}: all entries must be non-empty strings')
@@ -278,7 +278,7 @@ def _validate(data: dict, path: Path) -> dict:
             else:
                 bad = [k for k, v in value.items() if not _valid_rgba(v)]
                 for k in bad:
-                    errors.append(f'  {key}.{k}: expected [R, G, B, A] with integers 0\u2013255')
+                    errors.append(f'  {key}.{k}: expected [R, G, B, A] with integers 0–255')
                     del value[k]
 
         elif key == 'cli_command':
@@ -307,7 +307,7 @@ def _validate(data: dict, path: Path) -> dict:
     if errors:
         show_warning_box(
             f'Invalid values in settings file:\n{path}\n\n' + '\n'.join(errors),
-            'Usage Monitor for Codex - Settings Error',
+            'Usage Monitor for Copilot - Settings Error',
         )
 
     return data
@@ -356,15 +356,19 @@ ICON_DARK = _icon_colors('icon_dark', {
     'fg_warn': (224, 80, 80, 255),
 })
 
-# Tray icon fields
-ICON_FIELDS: list[str] = _S.get('icon_fields', ['five_hour', 'seven_day'])
+# Tray icon fields.  A single field by default - unlike Claude/Codex, most
+# Copilot quota types (chat, completions) are frequently unlimited
+# (isUnlimitedEntitlement) on paid plans, so defaulting to a pair of fields
+# would often show a permanently-empty or moot bar.  premium_interactions is
+# the one quota type that stays consistently metered/scarce across plan tiers.
+ICON_FIELDS: list[str] = _S.get('icon_fields', ['premium_interactions'])
 
 # Tray icon layout: 'number+bars' shows the top field's percentage above two
 # usage bars, 'numbers' shows both fields as two stacked percentages
 ICON_STYLE: str = _S.get('icon_style', 'number+bars')
 
 # Tooltip fields
-TOOLTIP_FIELDS: list[str] = _S.get('tooltip_fields', ['five_hour', 'seven_day'])
+TOOLTIP_FIELDS: list[str] = _S.get('tooltip_fields', ['premium_interactions'])
 
 # Popup fields
 POPUP_FIELDS: list[str] = _S.get('popup_fields', ['*'])
@@ -377,7 +381,7 @@ ALERT_TIME_AWARE: bool = _S.get('alert_time_aware', True)
 ALERT_TIME_AWARE_BELOW: float = _S.get('alert_time_aware_below', 90)
 
 # Legacy compatibility setting retained for settings files from the upstream monitor.
-NOTIFY_CODEX_UPDATE: bool = _S.get('notify_codex_update', True)
+NOTIFY_COPILOT_UPDATE: bool = _S.get('notify_copilot_update', True)
 
 # Currency
 
@@ -403,10 +407,10 @@ LANGUAGE: str = _S.get('language', '')
 _SYSTEM_TIME_FORMAT = system_time_format()
 TIME_FORMAT: str = _S.get('time_format', _SYSTEM_TIME_FORMAT)
 
-# Extra Codex CLI command(s) to report a version for - name -> base command
+# Extra Copilot CLI command(s) to report a version for - name -> base command
 # (e.g. run the version check inside WSL).  Display only: these are listed in
 # addition to the auto-detected native binary and the IDE extensions, and never
-# take part in authentication (see codex_cli.py).
+# take part in authentication (see copilot_cli.py).
 CLI_COMMAND: dict[str, list[str]] = _S.get('cli_command', {})
 
 # Event commands.  The quick action is the one a user triggers directly - by
@@ -417,10 +421,11 @@ ON_RESET_COMMAND: list[str] = _S.get('on_reset_command', [])
 ON_STARTUP_COMMAND: list[str] = _S.get('on_startup_command', [])
 ON_THRESHOLD_COMMAND: list[str] = _S.get('on_threshold_command', [])
 
+# Unlike Claude/Codex, Copilot's quota fields carry no period prefix (see
+# formatting.popup_label) - premium_interactions is the one quota type that
+# is consistently metered/scarce across plan tiers.
 _ALERT_THRESHOLDS: dict[str, list[float]] = {
-    'five_hour': [50, 80, 95],
-    'seven_day': [95],
-    'extra_usage': [50, 80, 95],
+    'premium_interactions': [50, 80, 95],
 }
 
 # Absolute extra-usage spending amounts (in major currency units, e.g. dollars)
@@ -440,7 +445,7 @@ def get_alert_thresholds(variant_key: str) -> list[float]:
     Parameters
     ----------
     variant_key : str
-        API variant key, e.g. ``'five_hour'``, ``'one_hour_code_review'``,
+        API field name, e.g. ``'premium_interactions'``, ``'chat'``,
         or ``'extra_usage'``.
     """
     exact_settings_key = f'{_THRESHOLD_KEY_PREFIX}{variant_key}'

@@ -12,12 +12,12 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import MagicMock, patch
 
-import usage_monitor_for_codex.settings as settings_mod
+import usage_monitor_for_copilot.settings as settings_mod
 
 
 def _load(app_dir: Path, home_dir: Path) -> dict:
     """Call _load_settings with controlled app_dir and home_dir."""
-    fake_file = str(app_dir / 'usage_monitor_for_codex' / 'settings.py')
+    fake_file = str(app_dir / 'usage_monitor_for_copilot' / 'settings.py')
     with patch.object(settings_mod, '__file__', fake_file), \
          patch.object(Path, 'home', return_value=home_dir), \
          patch.object(settings_mod, 'show_warning_box', MagicMock()):
@@ -42,69 +42,69 @@ class TestLoadSettings(unittest.TestCase):
         self.assertEqual(result, settings)
 
     def test_home_dir_fallback(self):
-        """Falls back to ~/.codex/ when no file next to app."""
+        """Falls back to ~/.copilot/ when no file next to app."""
         with TemporaryDirectory() as app_tmp, TemporaryDirectory() as home_tmp:
-            codex_dir = Path(home_tmp) / '.codex'
-            codex_dir.mkdir()
+            copilot_dir = Path(home_tmp) / '.copilot'
+            copilot_dir.mkdir()
             settings = {'bg': '#000000'}
-            (codex_dir / settings_mod.SETTINGS_FILENAME).write_text(json.dumps(settings), encoding='utf-8')
+            (copilot_dir / settings_mod.SETTINGS_FILENAME).write_text(json.dumps(settings), encoding='utf-8')
             result = _load(Path(app_tmp), Path(home_tmp))
         self.assertEqual(result, settings)
 
     def test_custom_config_dir_fallback(self):
-        """Falls back to CODEX_HOME when no file next to app."""
+        """Falls back to COPILOT_HOME when no file next to app."""
         with TemporaryDirectory() as app_tmp, TemporaryDirectory() as config_tmp:
             config_dir = Path(config_tmp)
             settings = {'bg': '#111111'}
             (config_dir / settings_mod.SETTINGS_FILENAME).write_text(json.dumps(settings), encoding='utf-8')
-            fake_file = str(Path(app_tmp) / 'usage_monitor_for_codex' / 'settings.py')
+            fake_file = str(Path(app_tmp) / 'usage_monitor_for_copilot' / 'settings.py')
             with patch.object(settings_mod, '__file__', fake_file), \
-                 patch.dict('os.environ', {'CODEX_HOME': config_tmp}), \
+                 patch.dict('os.environ', {'COPILOT_HOME': config_tmp}), \
                  patch.object(settings_mod, 'show_warning_box', MagicMock()):
                 result = settings_mod._load_settings()
         self.assertEqual(result, settings)
 
-    def test_home_codex_fallback_with_custom_config_dir(self):
-        """Falls back to ~/.codex/ when CODEX_HOME is set but has no settings file."""
+    def test_home_copilot_fallback_with_custom_config_dir(self):
+        """Falls back to ~/.copilot/ when COPILOT_HOME is set but has no settings file."""
         with TemporaryDirectory() as app_tmp, TemporaryDirectory() as home_tmp, TemporaryDirectory() as config_tmp:
-            codex_dir = Path(home_tmp) / '.codex'
-            codex_dir.mkdir()
+            copilot_dir = Path(home_tmp) / '.copilot'
+            copilot_dir.mkdir()
             settings = {'bg': '#222222'}
-            (codex_dir / settings_mod.SETTINGS_FILENAME).write_text(json.dumps(settings), encoding='utf-8')
-            fake_file = str(Path(app_tmp) / 'usage_monitor_for_codex' / 'settings.py')
+            (copilot_dir / settings_mod.SETTINGS_FILENAME).write_text(json.dumps(settings), encoding='utf-8')
+            fake_file = str(Path(app_tmp) / 'usage_monitor_for_copilot' / 'settings.py')
             with patch.object(settings_mod, '__file__', fake_file), \
                  patch.object(Path, 'home', return_value=Path(home_tmp)), \
-                 patch.dict('os.environ', {'CODEX_HOME': config_tmp}), \
+                 patch.dict('os.environ', {'COPILOT_HOME': config_tmp}), \
                  patch.object(settings_mod, 'show_warning_box', MagicMock()):
                 result = settings_mod._load_settings()
         self.assertEqual(result, settings)
 
-    def test_custom_config_dir_wins_over_home_codex(self):
-        """CODEX_HOME settings file takes priority over ~/.codex/."""
+    def test_custom_config_dir_wins_over_home_copilot(self):
+        """COPILOT_HOME settings file takes priority over ~/.copilot/."""
         with TemporaryDirectory() as app_tmp, TemporaryDirectory() as home_tmp, TemporaryDirectory() as config_tmp:
-            codex_dir = Path(home_tmp) / '.codex'
-            codex_dir.mkdir()
-            (codex_dir / settings_mod.SETTINGS_FILENAME).write_text(json.dumps({'bg': '#home'}), encoding='utf-8')
+            copilot_dir = Path(home_tmp) / '.copilot'
+            copilot_dir.mkdir()
+            (copilot_dir / settings_mod.SETTINGS_FILENAME).write_text(json.dumps({'bg': '#home'}), encoding='utf-8')
             (Path(config_tmp) / settings_mod.SETTINGS_FILENAME).write_text(json.dumps({'bg': '#custom'}), encoding='utf-8')
-            fake_file = str(Path(app_tmp) / 'usage_monitor_for_codex' / 'settings.py')
+            fake_file = str(Path(app_tmp) / 'usage_monitor_for_copilot' / 'settings.py')
             with patch.object(settings_mod, '__file__', fake_file), \
                  patch.object(Path, 'home', return_value=Path(home_tmp)), \
-                 patch.dict('os.environ', {'CODEX_HOME': config_tmp}), \
+                 patch.dict('os.environ', {'COPILOT_HOME': config_tmp}), \
                  patch.object(settings_mod, 'show_warning_box', MagicMock()):
                 result = settings_mod._load_settings()
         self.assertEqual(result['bg'], '#custom')
 
-    def test_config_dir_same_as_home_codex_no_duplicate(self):
-        """When CODEX_HOME equals ~/.codex/, the path is searched only once."""
+    def test_config_dir_same_as_home_copilot_no_duplicate(self):
+        """When COPILOT_HOME equals ~/.copilot/, the path is searched only once."""
         with TemporaryDirectory() as app_tmp, TemporaryDirectory() as home_tmp:
-            codex_dir = Path(home_tmp) / '.codex'
-            codex_dir.mkdir()
+            copilot_dir = Path(home_tmp) / '.copilot'
+            copilot_dir.mkdir()
             settings = {'bg': '#333333'}
-            (codex_dir / settings_mod.SETTINGS_FILENAME).write_text(json.dumps(settings), encoding='utf-8')
-            fake_file = str(Path(app_tmp) / 'usage_monitor_for_codex' / 'settings.py')
+            (copilot_dir / settings_mod.SETTINGS_FILENAME).write_text(json.dumps(settings), encoding='utf-8')
+            fake_file = str(Path(app_tmp) / 'usage_monitor_for_copilot' / 'settings.py')
             with patch.object(settings_mod, '__file__', fake_file), \
                  patch.object(Path, 'home', return_value=Path(home_tmp)), \
-                 patch.dict('os.environ', {'CODEX_HOME': str(codex_dir)}), \
+                 patch.dict('os.environ', {'COPILOT_HOME': str(copilot_dir)}), \
                  patch.object(settings_mod, 'show_warning_box', MagicMock()):
                 result = settings_mod._load_settings()
         self.assertEqual(result, settings)
@@ -114,22 +114,22 @@ class TestLoadSettings(unittest.TestCase):
         with TemporaryDirectory() as app_tmp, TemporaryDirectory() as config_tmp:
             (Path(app_tmp) / settings_mod.SETTINGS_FILENAME).write_text(json.dumps({'bg': '#app'}), encoding='utf-8')
             (Path(config_tmp) / settings_mod.SETTINGS_FILENAME).write_text(json.dumps({'bg': '#custom'}), encoding='utf-8')
-            fake_file = str(Path(app_tmp) / 'usage_monitor_for_codex' / 'settings.py')
+            fake_file = str(Path(app_tmp) / 'usage_monitor_for_copilot' / 'settings.py')
             with patch.object(settings_mod, '__file__', fake_file), \
-                 patch.dict('os.environ', {'CODEX_HOME': config_tmp}), \
+                 patch.dict('os.environ', {'COPILOT_HOME': config_tmp}), \
                  patch.object(settings_mod, 'show_warning_box', MagicMock()):
                 result = settings_mod._load_settings()
         self.assertEqual(result['bg'], '#custom')
 
     def test_app_dir_takes_priority(self):
-        """File next to app wins over ~/.codex/ file."""
+        """File next to app wins over ~/.copilot/ file."""
         with TemporaryDirectory() as app_tmp, TemporaryDirectory() as home_tmp:
             app_settings = {'poll_interval': 60}
             home_settings = {'poll_interval': 300}
             (Path(app_tmp) / settings_mod.SETTINGS_FILENAME).write_text(json.dumps(app_settings), encoding='utf-8')
-            codex_dir = Path(home_tmp) / '.codex'
-            codex_dir.mkdir()
-            (codex_dir / settings_mod.SETTINGS_FILENAME).write_text(json.dumps(home_settings), encoding='utf-8')
+            copilot_dir = Path(home_tmp) / '.copilot'
+            copilot_dir.mkdir()
+            (copilot_dir / settings_mod.SETTINGS_FILENAME).write_text(json.dumps(home_settings), encoding='utf-8')
             result = _load(Path(app_tmp), Path(home_tmp))
         self.assertEqual(result['poll_interval'], 60)
 
@@ -178,7 +178,7 @@ class TestLoadSettings(unittest.TestCase):
         """Malformed JSON triggers a Windows MessageBox."""
         with TemporaryDirectory() as app_tmp, TemporaryDirectory() as home_tmp:
             (Path(app_tmp) / settings_mod.SETTINGS_FILENAME).write_text('{broken', encoding='utf-8')
-            fake_file = str(Path(app_tmp) / 'usage_monitor_for_codex' / 'settings.py')
+            fake_file = str(Path(app_tmp) / 'usage_monitor_for_copilot' / 'settings.py')
             mock_box = MagicMock()
             with patch.object(settings_mod, '__file__', fake_file), \
                  patch.object(Path, 'home', return_value=Path(home_tmp)), \
@@ -203,7 +203,7 @@ class TestLoadSettings(unittest.TestCase):
     def test_unreadable_file_returns_empty_dict(self):
         """File that cannot be read returns empty dict."""
         with TemporaryDirectory() as app_tmp, TemporaryDirectory() as home_tmp:
-            fake_file = str(Path(app_tmp) / 'usage_monitor_for_codex' / 'settings.py')
+            fake_file = str(Path(app_tmp) / 'usage_monitor_for_copilot' / 'settings.py')
             with patch.object(settings_mod, '__file__', fake_file), \
                  patch.object(Path, 'home', return_value=Path(home_tmp)), \
                  patch.object(settings_mod, 'show_warning_box', MagicMock()), \
@@ -229,7 +229,7 @@ class TestLoadSettings(unittest.TestCase):
         with TemporaryDirectory() as app_tmp, TemporaryDirectory() as home_tmp:
             settings = {'poll_interval': 'not_a_number', 'poll_fast': 30}
             (Path(app_tmp) / settings_mod.SETTINGS_FILENAME).write_text(json.dumps(settings), encoding='utf-8')
-            fake_file = str(Path(app_tmp) / 'usage_monitor_for_codex' / 'settings.py')
+            fake_file = str(Path(app_tmp) / 'usage_monitor_for_copilot' / 'settings.py')
             mock_box = MagicMock()
             with patch.object(settings_mod, '__file__', fake_file), \
                  patch.object(Path, 'home', return_value=Path(home_tmp)), \
@@ -273,9 +273,9 @@ class TestSettingsOverrides(unittest.TestCase):
             ('alert_thresholds_five_hour', [80]),
         ], absent=['alert_thresholds_seven_day'])
 
-    def test_notify_codex_update_override(self):
-        """notify_codex_update is overridden by settings; absent keeps the default on."""
-        self._assert_overrides({'notify_codex_update': False}, [('notify_codex_update', False)], absent=['alert_time_aware'])
+    def test_notify_copilot_update_override(self):
+        """notify_copilot_update is overridden by settings; absent keeps the default on."""
+        self._assert_overrides({'notify_copilot_update': False}, [('notify_copilot_update', False)], absent=['alert_time_aware'])
 
     def test_icon_color_override(self):
         """Icon color dicts are merged, JSON arrays become tuples."""
@@ -650,28 +650,28 @@ class TestSettingsValidation(unittest.TestCase):
         self.assertNotIn('alert_time_aware', result)
         mock.assert_called_once()
 
-    def test_notify_codex_update_true_valid(self):
-        """Boolean true for notify_codex_update passes through."""
-        result, mock = self._run_validate({'notify_codex_update': True})
-        self.assertIs(result['notify_codex_update'], True)
+    def test_notify_copilot_update_true_valid(self):
+        """Boolean true for notify_copilot_update passes through."""
+        result, mock = self._run_validate({'notify_copilot_update': True})
+        self.assertIs(result['notify_copilot_update'], True)
         mock.assert_not_called()
 
-    def test_notify_codex_update_false_valid(self):
-        """Boolean false for notify_codex_update passes through."""
-        result, mock = self._run_validate({'notify_codex_update': False})
-        self.assertIs(result['notify_codex_update'], False)
+    def test_notify_copilot_update_false_valid(self):
+        """Boolean false for notify_copilot_update passes through."""
+        result, mock = self._run_validate({'notify_copilot_update': False})
+        self.assertIs(result['notify_copilot_update'], False)
         mock.assert_not_called()
 
-    def test_notify_codex_update_int_dropped(self):
-        """Integer 0 for notify_codex_update is dropped (must be boolean)."""
-        result, mock = self._run_validate({'notify_codex_update': 0})
-        self.assertNotIn('notify_codex_update', result)
+    def test_notify_copilot_update_int_dropped(self):
+        """Integer 0 for notify_copilot_update is dropped (must be boolean)."""
+        result, mock = self._run_validate({'notify_copilot_update': 0})
+        self.assertNotIn('notify_copilot_update', result)
         mock.assert_called_once()
 
-    def test_notify_codex_update_string_dropped(self):
-        """String 'false' for notify_codex_update is dropped."""
-        result, mock = self._run_validate({'notify_codex_update': 'false'})
-        self.assertNotIn('notify_codex_update', result)
+    def test_notify_copilot_update_string_dropped(self):
+        """String 'false' for notify_copilot_update is dropped."""
+        result, mock = self._run_validate({'notify_copilot_update': 'false'})
+        self.assertNotIn('notify_copilot_update', result)
         mock.assert_called_once()
 
     # Command validation (string or array of strings)
@@ -745,8 +745,8 @@ class TestSettingsValidation(unittest.TestCase):
 
     def test_on_double_click_command_string_normalized_to_list(self):
         """String value for on_double_click_command is normalized to a single-element list."""
-        result, mock = self._run_validate({'on_double_click_command': 'AgentMonitorForCodex.exe'})
-        self.assertEqual(result['on_double_click_command'], ['AgentMonitorForCodex.exe'])
+        result, mock = self._run_validate({'on_double_click_command': 'AgentMonitorForCopilot.exe'})
+        self.assertEqual(result['on_double_click_command'], ['AgentMonitorForCopilot.exe'])
         mock.assert_not_called()
 
     def test_on_double_click_command_list_valid(self):
@@ -765,8 +765,8 @@ class TestSettingsValidation(unittest.TestCase):
 
     def test_cli_command_valid(self):
         """Valid object mapping a name to a command array passes through."""
-        result, mock = self._run_validate({'cli_command': {'WSL': ['wsl', '/home/user/.local/bin/codex']}})
-        self.assertEqual(result['cli_command'], {'WSL': ['wsl', '/home/user/.local/bin/codex']})
+        result, mock = self._run_validate({'cli_command': {'WSL': ['wsl', '/home/user/.local/bin/copilot']}})
+        self.assertEqual(result['cli_command'], {'WSL': ['wsl', '/home/user/.local/bin/copilot']})
         mock.assert_not_called()
 
     def test_cli_command_empty_object_means_not_set(self):
@@ -777,13 +777,13 @@ class TestSettingsValidation(unittest.TestCase):
 
     def test_cli_command_not_object_dropped(self):
         """Non-object value is dropped with an error."""
-        result, mock = self._run_validate({'cli_command': ['wsl', 'codex']})
+        result, mock = self._run_validate({'cli_command': ['wsl', 'copilot']})
         self.assertNotIn('cli_command', result)
         mock.assert_called_once()
 
     def test_cli_command_empty_name_dropped(self):
         """An empty name key is dropped with an error."""
-        result, mock = self._run_validate({'cli_command': {'   ': ['wsl', 'codex']}})
+        result, mock = self._run_validate({'cli_command': {'   ': ['wsl', 'copilot']}})
         self.assertNotIn('cli_command', result)
         mock.assert_called_once()
 
@@ -795,7 +795,7 @@ class TestSettingsValidation(unittest.TestCase):
 
     def test_cli_command_non_array_value_dropped(self):
         """A non-array command value is dropped with an error."""
-        result, mock = self._run_validate({'cli_command': {'WSL': 'wsl codex'}})
+        result, mock = self._run_validate({'cli_command': {'WSL': 'wsl copilot'}})
         self.assertNotIn('cli_command', result)
         mock.assert_called_once()
 
@@ -841,11 +841,11 @@ class TestIconFieldsValidation(unittest.TestCase):
         self.assertNotIn('icon_fields', result)
         mock.assert_called_once()
 
-    def test_one_entry_dropped(self):
-        """Array with only one entry is dropped."""
-        result, mock = self._run_validate({'icon_fields': ['five_hour']})
-        self.assertNotIn('icon_fields', result)
-        mock.assert_called_once()
+    def test_one_entry_accepted(self):
+        """Array with exactly one entry is accepted (matches the single-field default)."""
+        result, mock = self._run_validate({'icon_fields': ['premium_interactions']})
+        self.assertEqual(result['icon_fields'], ['premium_interactions'])
+        mock.assert_not_called()
 
     def test_three_entries_dropped(self):
         """Array with three entries is dropped."""
@@ -918,18 +918,20 @@ class TestIconFieldsDefault(unittest.TestCase):
     """Tests for ICON_FIELDS default value."""
 
     def test_default_without_settings(self):
-        """Default icon_fields is ['five_hour', 'seven_day'] when no settings file exists."""
+        """Default icon_fields is ['premium_interactions'] when no settings file exists."""
         with TemporaryDirectory() as app_tmp, TemporaryDirectory() as home_tmp:
             loaded = _load(Path(app_tmp), Path(home_tmp))
         self.assertNotIn('icon_fields', loaded)
 
     def test_override_from_settings(self):
-        """icon_fields is loaded from settings file."""
+        """icon_fields is loaded from settings file.  The validator accepts 1 or 2
+        entries for an explicit override, matching the single-field default (see
+        settings.py's icon_fields validator)."""
         with TemporaryDirectory() as app_tmp, TemporaryDirectory() as home_tmp:
-            settings = {'icon_fields': ['seven_day', 'five_hour']}
+            settings = {'icon_fields': ['chat', 'completions']}
             (Path(app_tmp) / settings_mod.SETTINGS_FILENAME).write_text(json.dumps(settings), encoding='utf-8')
             loaded = _load(Path(app_tmp), Path(home_tmp))
-        self.assertEqual(loaded['icon_fields'], ['seven_day', 'five_hour'])
+        self.assertEqual(loaded['icon_fields'], ['chat', 'completions'])
 
 
 class TestIconStyleDefault(unittest.TestCase):
@@ -1019,7 +1021,7 @@ class TestTooltipFieldsDefault(unittest.TestCase):
     """Tests for TOOLTIP_FIELDS default value."""
 
     def test_default_without_settings(self):
-        """Default tooltip_fields is ['five_hour', 'seven_day'] when no settings file exists."""
+        """Default tooltip_fields is ['premium_interactions'] when no settings file exists."""
         with TemporaryDirectory() as app_tmp, TemporaryDirectory() as home_tmp:
             loaded = _load(Path(app_tmp), Path(home_tmp))
         self.assertNotIn('tooltip_fields', loaded)
@@ -1027,10 +1029,10 @@ class TestTooltipFieldsDefault(unittest.TestCase):
     def test_override_from_settings(self):
         """tooltip_fields is loaded from settings file."""
         with TemporaryDirectory() as app_tmp, TemporaryDirectory() as home_tmp:
-            settings = {'tooltip_fields': ['seven_day_sonnet']}
+            settings = {'tooltip_fields': ['chat']}
             (Path(app_tmp) / settings_mod.SETTINGS_FILENAME).write_text(json.dumps(settings), encoding='utf-8')
             loaded = _load(Path(app_tmp), Path(home_tmp))
-        self.assertEqual(loaded['tooltip_fields'], ['seven_day_sonnet'])
+        self.assertEqual(loaded['tooltip_fields'], ['chat'])
 
 
 class TestGetAlertThresholds(unittest.TestCase):
@@ -1262,8 +1264,8 @@ class TestCompactHideValidation(unittest.TestCase):
 
     def test_valid_list(self):
         """Array of section keys and field names passes through."""
-        result, mock = self._run_validate({'compact_hide': ['account', 'codex_code', 'seven_day_opus']})
-        self.assertEqual(result['compact_hide'], ['account', 'codex_code', 'seven_day_opus'])
+        result, mock = self._run_validate({'compact_hide': ['account', 'copilot_code', 'premium_interactions']})
+        self.assertEqual(result['compact_hide'], ['account', 'copilot_code', 'premium_interactions'])
         mock.assert_not_called()
 
     def test_empty_list_valid(self):

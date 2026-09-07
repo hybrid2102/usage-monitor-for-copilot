@@ -1,4 +1,4 @@
-"""Entry point for ``python -m usage_monitor_for_codex``."""
+"""Entry point for ``python -m usage_monitor_for_copilot``."""
 from __future__ import annotations
 
 import logging
@@ -8,20 +8,20 @@ import sys
 import traceback
 from pathlib import Path
 
-from usage_monitor_for_codex.instance_id import parse_config_dir
-from usage_monitor_for_codex.platforms import (
+from usage_monitor_for_copilot.instance_id import parse_config_dir
+from usage_monitor_for_copilot.platforms import (
     no_window_kwargs, prepare_gui_environment, set_dpi_awareness, show_error_box,
 )
 
 _verbose = '--verbose' in sys.argv
 
-# --config-dir selects which Codex account to monitor. It must be
-# resolved into CODEX_HOME before any package import that reads the
+# --config-dir selects which Copilot account to monitor. It must be
+# resolved into COPILOT_HOME before any package import that reads the
 # variable: api, settings, verbose and i18n all read it at import or
 # first-use time. Keep every other package import below this block.
 #
 # instance_id and platforms are the only exceptions, imported above because
-# this block needs them. Neither reads CODEX_HOME at import time, and
+# this block needs them. Neither reads COPILOT_HOME at import time, and
 # platforms cannot start doing so - settings imports platforms, so the
 # reverse would be a cycle.
 _config_dir = parse_config_dir(sys.argv)
@@ -30,15 +30,15 @@ if _config_dir is not None:
     if not _config_path.is_dir():
         show_error_box(
             f'--config-dir directory does not exist:\n{_config_dir}',
-            'Usage Monitor for Codex - Error',
+            'Usage Monitor for Copilot - Error',
         )
         sys.exit(1)
-    os.environ['CODEX_HOME'] = str(_config_path.resolve())
+    os.environ['COPILOT_HOME'] = str(_config_path.resolve())
 
 # In frozen builds (console=False), stdout/stderr go nowhere.
 # --verbose attaches a console so diagnostics are visible.
 if _verbose and getattr(sys, 'frozen', False):
-    from usage_monitor_for_codex.verbose import setup_console
+    from usage_monitor_for_copilot.verbose import setup_console
     setup_console()
 
 # Both must be settled before pywebview creates any window: DPI awareness
@@ -48,14 +48,14 @@ set_dpi_awareness()
 prepare_gui_environment()
 
 if _verbose:
-    from usage_monitor_for_codex.verbose import print_startup_diagnostics
+    from usage_monitor_for_copilot.verbose import print_startup_diagnostics
     print_startup_diagnostics()
 
 import webview  # type: ignore[import-untyped]  # no type stubs available
 
-from usage_monitor_for_codex.app import UsageMonitorForCodex, crash_log
-from usage_monitor_for_codex.platforms import register_notification_identity
-from usage_monitor_for_codex.platforms.instance import ensure_single_instance, release_instance_lock
+from usage_monitor_for_copilot.app import UsageMonitorForCopilot, crash_log
+from usage_monitor_for_copilot.platforms import register_notification_identity
+from usage_monitor_for_copilot.platforms.instance import ensure_single_instance, release_instance_lock
 
 if _verbose:
     logging.basicConfig(
@@ -77,12 +77,12 @@ def _run_app() -> None:
     """Run the tray application in a background thread (called by webview)."""
     try:
         if _verbose:
-            from usage_monitor_for_codex.verbose import print_runtime_diagnostics
+            from usage_monitor_for_copilot.verbose import print_runtime_diagnostics
             print_runtime_diagnostics()
 
-        _verbose_step('UsageMonitorForCodex()...')
-        app = UsageMonitorForCodex()
-        _verbose_step('UsageMonitorForCodex()... OK')
+        _verbose_step('UsageMonitorForCopilot()...')
+        app = UsageMonitorForCopilot()
+        _verbose_step('UsageMonitorForCopilot()... OK')
 
         _verbose_step('app.run...')
         app.run()
@@ -129,7 +129,7 @@ try:
 
         passthrough_args = []
         if _config_dir is not None:
-            passthrough_args.append(f'--config-dir={os.environ["CODEX_HOME"]}')
+            passthrough_args.append(f'--config-dir={os.environ["COPILOT_HOME"]}')
         if _verbose:
             passthrough_args.append('--verbose')
 
@@ -141,7 +141,7 @@ try:
             subprocess.Popen([sys.executable, *passthrough_args], env=env, **no_window_kwargs())
         else:
             subprocess.Popen(
-                [sys.executable, '-m', 'usage_monitor_for_codex', *passthrough_args], **no_window_kwargs(),
+                [sys.executable, '-m', 'usage_monitor_for_copilot', *passthrough_args], **no_window_kwargs(),
             )
 except Exception:
     crash_log(traceback.format_exc())

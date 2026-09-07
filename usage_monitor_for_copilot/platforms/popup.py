@@ -4,7 +4,7 @@ Popup Host Dispatch
 
 Selects the popup window host for the running system.
 
-Kept out of :mod:`usage_monitor_for_codex.platforms` for the same reason as
+Kept out of :mod:`usage_monitor_for_copilot.platforms` for the same reason as
 the single-instance guard: the hosts reach into pywebview, which the platform
 package itself must stay free of.
 """

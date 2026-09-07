@@ -3,7 +3,7 @@ Tray Icon
 ==========
 
 Renders the system tray icon.  Font loading and theme detection live in
-:mod:`usage_monitor_for_codex.platforms`; this module stays purely
+:mod:`usage_monitor_for_copilot.platforms`; this module stays purely
 about drawing.
 """
 from __future__ import annotations
@@ -33,7 +33,7 @@ def create_icon_image(
     time_pct_top: float | None = None, time_pct_bottom: float | None = None,
     extra_usage_available: bool = False,
 ) -> Image.Image:
-    """Create tray icon: terminal prompt + two usage bars.
+    """Create tray icon: idle chevron + two usage bars.
 
     With ``ICON_STYLE`` set to ``'numbers'`` the icon instead shows the two
     utilization percentages as stacked rows without bars; the mode and
@@ -72,7 +72,8 @@ def create_icon_image(
 
     if ICON_STYLE == 'numbers':
         # Two states collapse both rows into one full-size glyph: idle shows
-        # a terminal prompt, and both quotas exhausted shows one large '✕'/'$' -
+        # the app's wing/chevron mark, and both quotas exhausted shows one
+        # large '✕'/'$' -
         # extra_usage_available applies account-wide, so the two rows would
         # only repeat the same symbol twice at half size.
         if pct_top >= 100 and pct_bottom >= 100 and not extra_usage_available:
@@ -80,7 +81,7 @@ def create_icon_image(
         elif pct_top >= 100 and pct_bottom >= 100:
             _draw_centered_text(draw, '$', load_font(42), 2, fg)
         elif pct_top <= 0 and pct_bottom <= 0:
-            _draw_centered_text(draw, '>', load_font(42), 0, fg)
+            _draw_centered_text(draw, '^', load_font(42), 0, fg)
         else:
             _draw_number_row(draw, 0, pct_top, extra_usage_available, fg)
             _draw_number_row(draw, NUMBER_ROW_HEIGHT, pct_bottom, extra_usage_available, fg)
@@ -88,7 +89,7 @@ def create_icon_image(
 
     # Top glyph: "✕" when any quota exhausted and no extra credits left,
     # "$" when exhausted but paid extra-usage still available,
-    # ">" while usage is still zero, otherwise the percentage.
+    # "^" while usage is still zero, otherwise the percentage.
     stroke_width = 0
     any_exhausted = pct_top >= 100 or pct_bottom >= 100
     if any_exhausted and not extra_usage_available:
@@ -102,7 +103,7 @@ def create_icon_image(
         # '100' that overflows the canvas and reads as exhausted.
         text, font = f'{min(pct_top, 99):.0f}', load_font(40)
     else:
-        text, font = '>', load_font(42)
+        text, font = '^', load_font(42)
 
     bbox = draw.textbbox((0, 0), text, font=font, stroke_width=stroke_width)
     tw = bbox[2] - bbox[0]

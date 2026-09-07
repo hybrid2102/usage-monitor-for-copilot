@@ -3,7 +3,7 @@ Windows Backend
 ================
 
 Win32 implementations of the platform API.  Imported only on Windows;
-see :mod:`usage_monitor_for_codex.platforms` for the dispatch.
+see :mod:`usage_monitor_for_copilot.platforms` for the dispatch.
 """
 from __future__ import annotations
 
@@ -47,12 +47,12 @@ _WEBVIEW2_GUIDS = [
 ]
 
 AUTOSTART_REG_KEY = r'Software\Microsoft\Windows\CurrentVersion\Run'
-AUTOSTART_REG_BASE_NAME = 'UsageMonitorForCodex'
+AUTOSTART_REG_BASE_NAME = 'UsageMonitorForCopilot'
 
-# Stable per-application identity.  Every instance (one per Codex account)
+# Stable per-application identity.  Every instance (one per Copilot account)
 # shares it, so notifications group under one name and logo.
-APP_USER_MODEL_ID = 'Hybrid2102.UsageMonitorForCodex'
-DISPLAY_NAME = 'Usage Monitor for Codex'
+APP_USER_MODEL_ID = 'Hybrid2102.UsageMonitorForCopilot'
+DISPLAY_NAME = 'Usage Monitor for Copilot'
 
 # Neutral branded logo (empty usage bars) shown as the notification icon.
 # A multi-size .ico (16-256 px) so Windows picks a crisp frame for the small

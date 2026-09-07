@@ -8,7 +8,7 @@ measured, tray-anchored positioning, the dismiss watch built from low-level
 hooks, and the pinned-popup drag.
 
 The popup's data flow and orchestration live in
-:mod:`usage_monitor_for_codex.popup`; this module never touches usage data.
+:mod:`usage_monitor_for_copilot.popup`; this module never touches usage data.
 """
 from __future__ import annotations
 

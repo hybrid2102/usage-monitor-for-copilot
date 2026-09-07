@@ -2,13 +2,13 @@
 Build Script
 =============
 
-Builds a standalone EXE for Usage Monitor for Codex using PyInstaller.
+Builds a standalone EXE for Usage Monitor for Copilot using PyInstaller.
 
 Usage:
     python build.py
 
 Produces:
-    dist/UsageMonitorForCodex.exe
+    dist/UsageMonitorForCopilot.exe
 """
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).parent
 DIST = ROOT / 'dist'
-SPEC = ROOT / 'usage_monitor_for_codex.spec'
+SPEC = ROOT / 'usage_monitor_for_copilot.spec'
 
 
 def build() -> None:
@@ -27,7 +27,7 @@ def build() -> None:
     cmd = [sys.executable, '-m', 'PyInstaller', '--clean', '--noconfirm', str(SPEC)]
     subprocess.check_call(cmd, cwd=str(ROOT))
 
-    exe = DIST / 'UsageMonitorForCodex.exe'
+    exe = DIST / 'UsageMonitorForCopilot.exe'
     if exe.exists():
         size_mb = exe.stat().st_size / (1024 * 1024)
         print(f'\nBuild successful!  {exe}  ({size_mb:.1f} MB)')

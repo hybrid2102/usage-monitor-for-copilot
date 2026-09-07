@@ -2,7 +2,7 @@
 Formatting Tests
 =================
 
-Unit tests for parse_field_name(), tooltip_label(), elapsed_pct(),
+Unit tests for tooltip_label(), popup_label(), elapsed_pct(),
 time_until(), format_tooltip(), and format_credits().
 """
 from __future__ import annotations
@@ -12,66 +12,14 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
-from usage_monitor_for_codex.formatting import (
+from usage_monitor_for_copilot.formatting import (
     PERIOD_5H, PERIOD_7D,
     divider_positions, elapsed_pct, expand_popup_fields, field_period, format_credits,
-    format_tooltip, parse_field_name, popup_label, time_until, tooltip_label,
+    format_tooltip, popup_label, time_until, tooltip_label,
 )
-from usage_monitor_for_codex.i18n import LOCALE_DIR
+from usage_monitor_for_copilot.i18n import LOCALE_DIR
 
 EN = json.loads((LOCALE_DIR / 'en.json').read_text(encoding='utf-8'))
-
-
-# ---------------------------------------------------------------------------
-# parse_field_name
-# ---------------------------------------------------------------------------
-
-class TestParseFieldName(unittest.TestCase):
-    """Tests for parse_field_name()."""
-
-    def test_five_hour(self):
-        self.assertEqual(parse_field_name('five_hour'), (5, 'hour', None))
-
-    def test_seven_day(self):
-        self.assertEqual(parse_field_name('seven_day'), (7, 'day', None))
-
-    def test_seven_day_sonnet(self):
-        self.assertEqual(parse_field_name('seven_day_sonnet'), (7, 'day', 'sonnet'))
-
-    def test_seven_day_opus(self):
-        self.assertEqual(parse_field_name('seven_day_opus'), (7, 'day', 'opus'))
-
-    def test_three_day_cowork(self):
-        self.assertEqual(parse_field_name('three_day_cowork'), (3, 'day', 'cowork'))
-
-    def test_variant_with_underscores(self):
-        """Multi-word variant is preserved as a single string."""
-        self.assertEqual(parse_field_name('seven_day_oauth_apps'), (7, 'day', 'oauth_apps'))
-
-    def test_one_hour(self):
-        self.assertEqual(parse_field_name('one_hour'), (1, 'hour', None))
-
-    def test_twelve_day(self):
-        self.assertEqual(parse_field_name('twelve_day'), (12, 'day', None))
-
-    def test_unknown_number_word(self):
-        """Unrecognized number word returns None."""
-        self.assertIsNone(parse_field_name('iguana_day'))
-
-    def test_unknown_unit(self):
-        """Unrecognized unit returns None."""
-        self.assertIsNone(parse_field_name('one_year_cowork'))
-
-    def test_no_underscore(self):
-        """Word without underscore returns None."""
-        self.assertIsNone(parse_field_name('foobar'))
-
-    def test_unknown_number_and_unit(self):
-        """Both number word and unit unrecognized returns None."""
-        self.assertIsNone(parse_field_name('extra_usage'))
-
-    def test_empty_string(self):
-        self.assertIsNone(parse_field_name(''))
 
 
 # ---------------------------------------------------------------------------
@@ -79,87 +27,73 @@ class TestParseFieldName(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 class TestTooltipLabel(unittest.TestCase):
-    """Tests for tooltip_label()."""
+    """Tests for tooltip_label().
 
-    def test_five_hour(self):
-        self.assertEqual(tooltip_label('five_hour'), '5h')
+    Unlike Claude/Codex, Copilot's field names (the raw ``quotaSnapshots``
+    keys) carry no period prefix to parse - every field is humanized
+    generically instead, so any field GitHub adds later is labeled
+    automatically without a lookup table.
+    """
 
-    def test_seven_day(self):
-        self.assertEqual(tooltip_label('seven_day'), '7d')
+    def test_single_word(self):
+        self.assertEqual(tooltip_label('chat'), 'Chat')
 
-    def test_seven_day_sonnet(self):
-        self.assertEqual(tooltip_label('seven_day_sonnet'), '7d Sonnet')
+    def test_multi_word(self):
+        self.assertEqual(tooltip_label('premium_interactions'), 'Premium Interactions')
 
-    def test_seven_day_opus(self):
-        self.assertEqual(tooltip_label('seven_day_opus'), '7d Opus')
-
-    def test_three_day_cowork(self):
-        self.assertEqual(tooltip_label('three_day_cowork'), '3d Cowork')
-
-    def test_five_hour_something(self):
-        self.assertEqual(tooltip_label('five_hour_something'), '5h Something')
-
-    def test_multi_word_variant(self):
-        self.assertEqual(tooltip_label('seven_day_oauth_apps'), '7d OAuth Apps')
-
-    def test_unknown_number_fallback(self):
-        """Unrecognized number word falls back to title case."""
-        self.assertEqual(tooltip_label('iguana_necktie'), 'Iguana Necktie')
-
-    def test_unknown_unit_fallback(self):
-        """Unrecognized unit falls back to title case."""
-        self.assertEqual(tooltip_label('one_year_cowork'), 'One Year Cowork')
-
-    def test_no_underscore_fallback(self):
-        """Word without underscore falls back to title case."""
-        self.assertEqual(tooltip_label('foobar'), 'Foobar')
-
-    def test_unknown_number_and_unit_fallback(self):
-        self.assertEqual(tooltip_label('extra_usage'), 'Extra Usage')
+    def test_completions(self):
+        self.assertEqual(tooltip_label('completions'), 'Completions')
 
     def test_abbreviation_oauth(self):
         """oauth is title-cased as OAuth."""
-        self.assertEqual(tooltip_label('seven_day_oauth'), '7d OAuth')
+        self.assertEqual(tooltip_label('oauth_apps'), 'OAuth Apps')
 
     def test_abbreviation_api(self):
         """api is title-cased as API."""
-        self.assertEqual(tooltip_label('seven_day_api'), '7d API')
+        self.assertEqual(tooltip_label('api_requests'), 'API Requests')
+
+    def test_abbreviation_ai(self):
+        """ai is title-cased as AI."""
+        self.assertEqual(tooltip_label('ai_credits'), 'AI Credits')
+
+    def test_unknown_field_humanized(self):
+        """A field GitHub has not shipped yet is still humanized, no crash."""
+        self.assertEqual(tooltip_label('future_quota_type'), 'Future Quota Type')
+
+    def test_no_underscore(self):
+        self.assertEqual(tooltip_label('foobar'), 'Foobar')
+
+    def test_empty_string(self):
+        self.assertEqual(tooltip_label(''), '')
 
 
 # ---------------------------------------------------------------------------
 # popup_label
 # ---------------------------------------------------------------------------
 
-@patch('usage_monitor_for_codex.formatting.T', EN)
+@patch('usage_monitor_for_copilot.formatting.T', EN)
 class TestPopupLabel(unittest.TestCase):
-    """Tests for popup_label()."""
+    """Tests for popup_label().
 
-    def test_five_hour(self):
-        self.assertEqual(popup_label('five_hour'), 'Session (5hr)')
+    All fields render through the single ``quota_label`` template - GitHub's
+    quotaSnapshots reset monthly, so unlike Claude/Codex there is no
+    session/weekly distinction to pick a template by.
+    """
 
-    def test_seven_day(self):
-        self.assertEqual(popup_label('seven_day'), 'Weekly (7 day)')
+    def test_premium_interactions(self):
+        self.assertEqual(popup_label('premium_interactions'), 'Premium Interactions (Monthly)')
 
-    def test_seven_day_sonnet(self):
-        self.assertEqual(popup_label('seven_day_sonnet'), 'Weekly (Sonnet)')
+    def test_chat(self):
+        self.assertEqual(popup_label('chat'), 'Chat (Monthly)')
 
-    def test_seven_day_opus(self):
-        self.assertEqual(popup_label('seven_day_opus'), 'Weekly (Opus)')
+    def test_completions(self):
+        self.assertEqual(popup_label('completions'), 'Completions (Monthly)')
 
-    def test_seven_day_cowork(self):
-        self.assertEqual(popup_label('seven_day_cowork'), 'Weekly (Cowork)')
+    def test_abbreviation(self):
+        self.assertEqual(popup_label('oauth_apps'), 'OAuth Apps (Monthly)')
 
-    def test_seven_day_oauth_apps(self):
-        self.assertEqual(popup_label('seven_day_oauth_apps'), 'Weekly (OAuth Apps)')
-
-    def test_three_day_foo(self):
-        self.assertEqual(popup_label('three_day_foo'), 'Weekly (Foo)')
-
-    def test_unknown_fallback(self):
-        self.assertEqual(popup_label('extra_usage'), 'Extra Usage')
-
-    def test_unknown_with_abbreviation(self):
-        self.assertEqual(popup_label('some_api_thing'), 'Some API Thing')
+    def test_unknown_field(self):
+        self.assertEqual(popup_label('future_quota_type'), 'Future Quota Type (Monthly)')
 
 
 # ---------------------------------------------------------------------------
@@ -167,25 +101,24 @@ class TestPopupLabel(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 class TestFieldPeriod(unittest.TestCase):
-    """Tests for field_period()."""
+    """Tests for field_period().
 
-    def test_five_hour(self):
-        self.assertEqual(field_period('five_hour'), 5 * 3600)
+    Unlike Claude/Codex's five_hour/seven_day naming, Copilot field names
+    never encode a period, so this always returns None - app.py and popup.py
+    rely on that to skip the elapsed-time marker on a usage bar.
+    """
 
-    def test_seven_day(self):
-        self.assertEqual(field_period('seven_day'), 7 * 24 * 3600)
+    def test_premium_interactions(self):
+        self.assertIsNone(field_period('premium_interactions'))
 
-    def test_seven_day_sonnet(self):
-        self.assertEqual(field_period('seven_day_sonnet'), 7 * 24 * 3600)
+    def test_chat(self):
+        self.assertIsNone(field_period('chat'))
 
-    def test_three_day(self):
-        self.assertEqual(field_period('three_day'), 3 * 24 * 3600)
+    def test_unknown_field(self):
+        self.assertIsNone(field_period('future_quota_type'))
 
-    def test_unknown_returns_none(self):
-        self.assertIsNone(field_period('extra_usage'))
-
-    def test_unknown_unit_returns_none(self):
-        self.assertIsNone(field_period('one_year'))
+    def test_empty_string(self):
+        self.assertIsNone(field_period(''))
 
 
 # ---------------------------------------------------------------------------
@@ -200,108 +133,96 @@ class TestExpandPopupFields(unittest.TestCase):
         return {k: {'utilization': v, 'resets_at': ''} for k, v in kwargs.items()}
 
     def test_wildcard_only(self):
-        """Wildcard returns all fields in default order."""
-        usage = self._usage(seven_day=20, five_hour=10, seven_day_sonnet=30)
+        """Wildcard returns all fields in default (alphabetical) order."""
+        usage = self._usage(premium_interactions=30, chat=10, completions=20)
         result = expand_popup_fields(['*'], usage)
-        self.assertEqual(result, ['five_hour', 'seven_day', 'seven_day_sonnet'])
+        self.assertEqual(result, ['chat', 'completions', 'premium_interactions'])
 
     def test_explicit_fields(self):
         """Explicit field names shown in listed order."""
-        usage = self._usage(five_hour=10, seven_day=20, seven_day_sonnet=30)
-        result = expand_popup_fields(['seven_day_sonnet', 'five_hour'], usage)
-        self.assertEqual(result, ['seven_day_sonnet', 'five_hour'])
+        usage = self._usage(chat=10, completions=20, premium_interactions=30)
+        result = expand_popup_fields(['premium_interactions', 'chat'], usage)
+        self.assertEqual(result, ['premium_interactions', 'chat'])
 
     def test_wildcard_after_explicit(self):
         """Wildcard fills in remaining fields after explicit ones."""
-        usage = self._usage(five_hour=10, seven_day=20, seven_day_sonnet=30)
-        result = expand_popup_fields(['seven_day_sonnet', '*'], usage)
-        self.assertEqual(result, ['seven_day_sonnet', 'five_hour', 'seven_day'])
+        usage = self._usage(chat=10, completions=20, premium_interactions=30)
+        result = expand_popup_fields(['premium_interactions', '*'], usage)
+        self.assertEqual(result, ['premium_interactions', 'chat', 'completions'])
 
     def test_null_fields_skipped(self):
         """Fields with None utilization are skipped."""
-        usage = {'five_hour': {'utilization': 10, 'resets_at': ''}, 'seven_day': {'utilization': None, 'resets_at': ''}}
+        usage = {'chat': {'utilization': 10, 'resets_at': ''}, 'completions': {'utilization': None, 'resets_at': ''}}
         result = expand_popup_fields(['*'], usage)
-        self.assertEqual(result, ['five_hour'])
+        self.assertEqual(result, ['chat'])
 
     def test_missing_fields_skipped(self):
         """Explicitly listed fields missing from API are skipped."""
-        usage = self._usage(five_hour=10)
-        result = expand_popup_fields(['five_hour', 'seven_day_sonnet'], usage)
-        self.assertEqual(result, ['five_hour'])
+        usage = self._usage(chat=10)
+        result = expand_popup_fields(['chat', 'premium_interactions'], usage)
+        self.assertEqual(result, ['chat'])
 
     def test_duplicates_removed(self):
         """Explicit field followed by wildcard does not duplicate."""
-        usage = self._usage(five_hour=10, seven_day=20)
-        result = expand_popup_fields(['five_hour', '*'], usage)
-        self.assertEqual(result, ['five_hour', 'seven_day'])
+        usage = self._usage(chat=10, completions=20)
+        result = expand_popup_fields(['chat', '*'], usage)
+        self.assertEqual(result, ['chat', 'completions'])
 
     def test_empty_setting(self):
         """Empty field list returns nothing."""
-        usage = self._usage(five_hour=10)
+        usage = self._usage(chat=10)
         result = expand_popup_fields([], usage)
         self.assertEqual(result, [])
 
-    def test_default_order_hour_before_day(self):
-        """Default order puts hour fields before day fields."""
-        usage = self._usage(seven_day=20, five_hour=10)
+    def test_default_order_alphabetical(self):
+        """Wildcard expansion sorts fields alphabetically - Copilot field names
+        carry no period to order by, unlike Claude/Codex's hour/day convention."""
+        usage = self._usage(premium_interactions=30, chat=10, completions=20)
         result = expand_popup_fields(['*'], usage)
-        self.assertEqual(result[0], 'five_hour')
-        self.assertEqual(result[1], 'seven_day')
-
-    def test_default_order_base_before_variant(self):
-        """Default order puts base field before variants."""
-        usage = self._usage(seven_day_sonnet=30, seven_day=20)
-        result = expand_popup_fields(['*'], usage)
-        self.assertEqual(result, ['seven_day', 'seven_day_sonnet'])
-
-    def test_default_order_variants_alphabetical(self):
-        """Default order sorts variants alphabetically."""
-        usage = self._usage(seven_day_opus=30, seven_day_cowork=20, seven_day_sonnet=10)
-        result = expand_popup_fields(['*'], usage)
-        self.assertEqual(result, ['seven_day_cowork', 'seven_day_opus', 'seven_day_sonnet'])
+        self.assertEqual(result, sorted(result))
 
     def test_misspelled_field_skipped(self):
         """Misspelled field names are silently skipped."""
-        usage = self._usage(five_hour=10, seven_day=20)
-        result = expand_popup_fields(['fve_hour', 'seven_day'], usage)
-        self.assertEqual(result, ['seven_day'])
+        usage = self._usage(chat=10, completions=20)
+        result = expand_popup_fields(['chatt', 'completions'], usage)
+        self.assertEqual(result, ['completions'])
 
     def test_non_dict_values_ignored(self):
         """Non-dict values in usage data (e.g. error strings) are ignored."""
-        usage = {'error': 'Connection failed', 'five_hour': {'utilization': 42, 'resets_at': ''}}
+        usage = {'error': 'Connection failed', 'chat': {'utilization': 42, 'resets_at': ''}}
         result = expand_popup_fields(['*'], usage)
-        self.assertEqual(result, ['five_hour'])
+        self.assertEqual(result, ['chat'])
 
     def test_extra_usage_excluded(self):
-        """extra_usage is excluded (no resets_at key, different structure)."""
+        """A dict lacking resets_at (e.g. an extra_usage-shaped block) is excluded."""
         usage = {
-            'five_hour': {'utilization': 10, 'resets_at': ''},
+            'chat': {'utilization': 10, 'resets_at': ''},
             'extra_usage': {'is_enabled': True, 'monthly_limit': 1000, 'used_credits': 500, 'utilization': 50},
         }
         result = expand_popup_fields(['*'], usage)
-        self.assertEqual(result, ['five_hour'])
+        self.assertEqual(result, ['chat'])
 
     def test_field_with_utilization_none_skipped(self):
         """Fields where utilization is None are skipped even when explicitly listed."""
-        usage = {'five_hour': {'utilization': None, 'resets_at': '2026-01-01T00:00:00Z'}}
-        result = expand_popup_fields(['five_hour'], usage)
+        usage = {'chat': {'utilization': None, 'resets_at': ''}}
+        result = expand_popup_fields(['chat'], usage)
         self.assertEqual(result, [])
 
     def test_field_without_resets_at_skipped(self):
         """Fields without resets_at key are skipped (not a quota bar)."""
-        usage = {'five_hour': {'utilization': 42}}
+        usage = {'chat': {'utilization': 42}}
         result = expand_popup_fields(['*'], usage)
         self.assertEqual(result, [])
 
     def test_all_fields_null(self):
         """All quota fields null returns empty list."""
-        usage = {'five_hour': None, 'seven_day': None, 'seven_day_sonnet': None}
+        usage = {'chat': None, 'completions': None, 'premium_interactions': None}
         result = expand_popup_fields(['*'], usage)
         self.assertEqual(result, [])
 
     def test_wildcard_with_all_misspelled(self):
         """Wildcard with no matching fields returns empty list."""
-        usage = self._usage(five_hour=10)
+        usage = self._usage(chat=10)
         result = expand_popup_fields(['typo_field', 'another_typo'], usage)
         self.assertEqual(result, [])
 
@@ -312,16 +233,16 @@ class TestExpandPopupFields(unittest.TestCase):
 
     def test_utilization_zero_included(self):
         """Fields with utilization 0 are included (0 is a valid value, not null)."""
-        usage = {'five_hour': {'utilization': 0, 'resets_at': ''}}
+        usage = {'chat': {'utilization': 0, 'resets_at': ''}}
         result = expand_popup_fields(['*'], usage)
-        self.assertEqual(result, ['five_hour'])
+        self.assertEqual(result, ['chat'])
 
 
 # ---------------------------------------------------------------------------
 # elapsed_pct
 # ---------------------------------------------------------------------------
 
-@patch('usage_monitor_for_codex.formatting.datetime')
+@patch('usage_monitor_for_copilot.formatting.datetime')
 class TestElapsedPct(unittest.TestCase):
     """Tests for elapsed_pct()."""
 
@@ -548,9 +469,9 @@ class TestDividerPositions(unittest.TestCase):
 # time_until
 # ---------------------------------------------------------------------------
 
-@patch('usage_monitor_for_codex.formatting.TIME_FORMAT', '24h')
-@patch('usage_monitor_for_codex.formatting.T', EN)
-@patch('usage_monitor_for_codex.formatting.datetime')
+@patch('usage_monitor_for_copilot.formatting.TIME_FORMAT', '24h')
+@patch('usage_monitor_for_copilot.formatting.T', EN)
+@patch('usage_monitor_for_copilot.formatting.datetime')
 class TestTimeUntil(unittest.TestCase):
     """Tests for time_until().
 
@@ -742,7 +663,7 @@ class TestTimeUntil(unittest.TestCase):
 # format_tooltip
 # ---------------------------------------------------------------------------
 
-@patch('usage_monitor_for_codex.formatting.T', EN)
+@patch('usage_monitor_for_copilot.formatting.T', EN)
 class TestFormatTooltip(unittest.TestCase):
     """Tests for format_tooltip()."""
 
@@ -770,58 +691,56 @@ class TestFormatTooltip(unittest.TestCase):
         error_line = result.split('\n')[1]
         self.assertEqual(len(error_line), 80)
 
-    @patch('usage_monitor_for_codex.formatting.time_until', return_value='')
-    def test_both_periods(self, _mock_tu):
-        data = {
-            'five_hour': {'utilization': 42.0, 'resets_at': ''},
-            'seven_day': {'utilization': 15.0, 'resets_at': ''},
-        }
-        self.assertEqual(format_tooltip(data), 'Codex Usage\n5h: 42%\n7d: 15%')
+    @patch('usage_monitor_for_copilot.formatting.time_until', return_value='')
+    def test_default_field(self, _mock_tu):
+        data = {'premium_interactions': {'utilization': 42.0, 'resets_at': ''}}
+        self.assertEqual(format_tooltip(data), 'Copilot Usage\nPremium Interactions: 42%')
 
-    @patch('usage_monitor_for_codex.formatting.time_until', return_value='Resets in 2h 30m (14:30)')
+    @patch('usage_monitor_for_copilot.formatting.time_until', return_value='')
+    def test_resets_at_always_empty_shows_no_reset_clause(self, _mock_tu):
+        """Copilot's resets_at is always '' (see the field-naming contract in
+        cache.py) - the tooltip line never grows a reset clause, unlike
+        Claude/Codex where a real resets_at appends '(Resets in ...)'."""
+        data = {'premium_interactions': {'utilization': 26.0, 'resets_at': ''}}
+        self.assertEqual(format_tooltip(data), 'Copilot Usage\nPremium Interactions: 26%')
+
+    @patch('usage_monitor_for_copilot.formatting.time_until', return_value='Resets in 2h 30m (14:30)')
     def test_with_reset_info(self, _mock_tu):
-        data = {'five_hour': {'utilization': 42.0, 'resets_at': '2025-01-15T14:30:00+00:00'}}
-        self.assertEqual(format_tooltip(data), 'Codex Usage\n5h: 42% (Resets in 2h 30m (14:30))')
+        """time_until() is still consulted per field - a non-empty return
+        (e.g. from a future API change) still renders the parenthetical."""
+        data = {'premium_interactions': {'utilization': 42.0, 'resets_at': '2025-01-15T14:30:00+00:00'}}
+        self.assertEqual(format_tooltip(data), 'Copilot Usage\nPremium Interactions: 42% (Resets in 2h 30m (14:30))')
 
-    @patch('usage_monitor_for_codex.formatting.time_until', return_value='')
+    @patch('usage_monitor_for_copilot.formatting.time_until', return_value='')
     def test_utilization_none_skipped(self, _mock_tu):
-        data = {
-            'five_hour': {'utilization': None, 'resets_at': ''},
-            'seven_day': {'utilization': 80.0, 'resets_at': ''},
-        }
-        self.assertEqual(format_tooltip(data), 'Codex Usage\n7d: 80%')
+        data = {'premium_interactions': {'utilization': None, 'resets_at': ''}}
+        self.assertEqual(format_tooltip(data), 'Copilot Usage')
 
-    @patch('usage_monitor_for_codex.formatting.time_until', return_value='')
+    @patch('usage_monitor_for_copilot.formatting.time_until', return_value='')
     def test_empty_data_shows_title_only(self, _mock_tu):
-        self.assertEqual(format_tooltip({}), 'Codex Usage')
+        self.assertEqual(format_tooltip({}), 'Copilot Usage')
 
-    @patch('usage_monitor_for_codex.formatting.time_until', return_value='')
+    @patch('usage_monitor_for_copilot.formatting.time_until', return_value='')
     def test_zero_percent(self, _mock_tu):
-        data = {'five_hour': {'utilization': 0.0, 'resets_at': ''}}
-        self.assertEqual(format_tooltip(data), 'Codex Usage\n5h: 0%')
+        data = {'premium_interactions': {'utilization': 0.0, 'resets_at': ''}}
+        self.assertEqual(format_tooltip(data), 'Copilot Usage\nPremium Interactions: 0%')
 
-    @patch('usage_monitor_for_codex.formatting.time_until', return_value='')
+    @patch('usage_monitor_for_copilot.formatting.time_until', return_value='')
     def test_hundred_percent(self, _mock_tu):
-        data = {'five_hour': {'utilization': 100.0, 'resets_at': ''}}
-        self.assertEqual(format_tooltip(data), 'Codex Usage\n5h: 100%')
+        data = {'premium_interactions': {'utilization': 100.0, 'resets_at': ''}}
+        self.assertEqual(format_tooltip(data), 'Copilot Usage\nPremium Interactions: 100%')
 
-    @patch('usage_monitor_for_codex.formatting.time_until', return_value='')
+    @patch('usage_monitor_for_copilot.formatting.time_until', return_value='')
     def test_entry_none_skipped(self, _mock_tu):
         """Entry that is None is skipped by the guard clause."""
-        data = {'five_hour': None, 'seven_day': {'utilization': 50.0, 'resets_at': ''}}
-        self.assertEqual(format_tooltip(data), 'Codex Usage\n7d: 50%')
+        data = {'premium_interactions': None}
+        self.assertEqual(format_tooltip(data), 'Copilot Usage')
 
-    @patch('usage_monitor_for_codex.formatting.time_until', return_value='')
+    @patch('usage_monitor_for_copilot.formatting.time_until', return_value='')
     def test_entry_empty_dict_skipped(self, _mock_tu):
         """Entry with no utilization key is skipped."""
-        data = {'five_hour': {}, 'seven_day': {'utilization': 50.0, 'resets_at': ''}}
-        self.assertEqual(format_tooltip(data), 'Codex Usage\n7d: 50%')
-
-    @patch('usage_monitor_for_codex.formatting.time_until', return_value='')
-    def test_only_seven_day(self, _mock_tu):
-        """Only seven_day present, five_hour absent."""
-        data = {'seven_day': {'utilization': 25.0, 'resets_at': ''}}
-        self.assertEqual(format_tooltip(data), 'Codex Usage\n7d: 25%')
+        data = {'premium_interactions': {}}
+        self.assertEqual(format_tooltip(data), 'Copilot Usage')
 
     def test_auth_error_false_shows_normal_error(self):
         """auth_error=False with error shows normal error, not auth message."""
@@ -829,57 +748,48 @@ class TestFormatTooltip(unittest.TestCase):
         result = format_tooltip(data)
         self.assertEqual(result, 'Usage Monitor: Error\nSomething broke')
 
-    @patch('usage_monitor_for_codex.formatting.time_until', return_value='')
-    def test_extra_usage_ignored(self, _mock_tu):
-        """Extra usage data is not shown in tooltip."""
-        data = {
-            'five_hour': {'utilization': 26.0, 'resets_at': ''},
-            'extra_usage': {'is_enabled': True, 'monthly_limit': 1000, 'used_credits': 420.0},
-        }
-        self.assertEqual(format_tooltip(data), 'Codex Usage\n5h: 26%')
-
-    @patch('usage_monitor_for_codex.formatting.time_until', return_value='')
-    @patch('usage_monitor_for_codex.formatting.TOOLTIP_FIELDS', ['seven_day_sonnet', 'five_hour'])
+    @patch('usage_monitor_for_copilot.formatting.time_until', return_value='')
+    @patch('usage_monitor_for_copilot.formatting.TOOLTIP_FIELDS', ['chat', 'completions'])
     def test_custom_fields_and_order(self, _mock_tu):
         """Custom tooltip_fields controls which fields appear and in what order."""
         data = {
-            'five_hour': {'utilization': 10.0, 'resets_at': ''},
-            'seven_day': {'utilization': 20.0, 'resets_at': ''},
-            'seven_day_sonnet': {'utilization': 30.0, 'resets_at': ''},
+            'premium_interactions': {'utilization': 10.0, 'resets_at': ''},
+            'chat': {'utilization': 20.0, 'resets_at': ''},
+            'completions': {'utilization': 30.0, 'resets_at': ''},
         }
-        self.assertEqual(format_tooltip(data), 'Codex Usage\n7d Sonnet: 30%\n5h: 10%')
+        self.assertEqual(format_tooltip(data), 'Copilot Usage\nChat: 20%\nCompletions: 30%')
 
-    @patch('usage_monitor_for_codex.formatting.time_until', return_value='')
-    @patch('usage_monitor_for_codex.formatting.TOOLTIP_FIELDS', ['seven_day_sonnet'])
+    @patch('usage_monitor_for_copilot.formatting.time_until', return_value='')
+    @patch('usage_monitor_for_copilot.formatting.TOOLTIP_FIELDS', ['chat'])
     def test_custom_field_null_skipped(self, _mock_tu):
         """Configured field that is null in API response is skipped."""
-        data = {'seven_day_sonnet': None, 'five_hour': {'utilization': 50.0, 'resets_at': ''}}
-        self.assertEqual(format_tooltip(data), 'Codex Usage')
+        data = {'chat': None, 'premium_interactions': {'utilization': 50.0, 'resets_at': ''}}
+        self.assertEqual(format_tooltip(data), 'Copilot Usage')
 
-    @patch('usage_monitor_for_codex.formatting.time_until', return_value='')
-    @patch('usage_monitor_for_codex.formatting.TOOLTIP_FIELDS', ['nonexistent_field'])
+    @patch('usage_monitor_for_copilot.formatting.time_until', return_value='')
+    @patch('usage_monitor_for_copilot.formatting.TOOLTIP_FIELDS', ['nonexistent_field'])
     def test_custom_field_missing_from_response_skipped(self, _mock_tu):
         """Configured field not present in API response is skipped."""
-        data = {'five_hour': {'utilization': 50.0, 'resets_at': ''}}
-        self.assertEqual(format_tooltip(data), 'Codex Usage')
+        data = {'premium_interactions': {'utilization': 50.0, 'resets_at': ''}}
+        self.assertEqual(format_tooltip(data), 'Copilot Usage')
 
-    @patch('usage_monitor_for_codex.formatting.time_until', return_value='')
-    @patch('usage_monitor_for_codex.formatting.TOOLTIP_FIELDS', [])
+    @patch('usage_monitor_for_copilot.formatting.time_until', return_value='')
+    @patch('usage_monitor_for_copilot.formatting.TOOLTIP_FIELDS', [])
     def test_empty_fields_shows_title_only(self, _mock_tu):
         """Empty tooltip_fields shows only the title."""
-        data = {'five_hour': {'utilization': 50.0, 'resets_at': ''}}
-        self.assertEqual(format_tooltip(data), 'Codex Usage')
+        data = {'premium_interactions': {'utilization': 50.0, 'resets_at': ''}}
+        self.assertEqual(format_tooltip(data), 'Copilot Usage')
 
-    @patch('usage_monitor_for_codex.formatting.time_until', return_value='')
-    @patch('usage_monitor_for_codex.formatting.TOOLTIP_FIELDS', ['five_hour', 'limits'])
+    @patch('usage_monitor_for_copilot.formatting.time_until', return_value='')
+    @patch('usage_monitor_for_copilot.formatting.TOOLTIP_FIELDS', ['premium_interactions', 'limits'])
     def test_custom_field_pointing_to_non_dict_skipped(self, _mock_tu):
-        """A configured field holding a non-dict response value (e.g. the limits
-        array) is skipped instead of crashing the poll loop."""
+        """A configured field holding a non-dict response value (e.g. a raw
+        limits array) is skipped instead of crashing the poll loop."""
         data = {
-            'five_hour': {'utilization': 50.0, 'resets_at': ''},
-            'limits': [{'percent': 12, 'group': 'weekly'}],
+            'premium_interactions': {'utilization': 50.0, 'resets_at': ''},
+            'limits': [{'percent': 12, 'group': 'monthly'}],
         }
-        self.assertEqual(format_tooltip(data), 'Codex Usage\n5h: 50%')
+        self.assertEqual(format_tooltip(data), 'Copilot Usage\nPremium Interactions: 50%')
 
 
 # ---------------------------------------------------------------------------
@@ -887,39 +797,23 @@ class TestFormatTooltip(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 class TestTooltipMaxLength(unittest.TestCase):
-    """Verify tooltip text stays within Windows' 127-char limit for all locales."""
+    """Verify tooltip text stays within Windows' 127-char limit for all locales.
+
+    Unlike Claude/Codex, Copilot's resets_at is always '' (see the field-naming
+    contract in cache.py), so time_until() never contributes a reset clause -
+    the worst case is just the title plus one 100% line for the longest known
+    default field label.
+    """
 
     TOOLTIP_MAX = 127
-
-    def _longest_reset(self, t: dict, max_hours: int) -> str:
-        """Return the longest possible reset text for a given max-hour value."""
-        dur = t['duration_hm'].format(h=max_hours, m=59)
-        candidates = [
-            t['resets_in'].format(duration=dur, clock='23:59'),
-            t['resets_tomorrow'].format(clock='23:59'),
-        ]
-        for wd in t['weekdays']:
-            candidates.append(t['resets_weekday'].format(day=wd, clock='23:59'))
-
-        return max(candidates, key=len)
-
-    def _worst_case_tooltip(self, t: dict) -> str:
-        """Build the longest possible tooltip from a locale dict.
-
-        Worst case: both 5h and 7d visible at 100%, each with the longest
-        possible reset text (same-day, tomorrow, or weekday).
-        """
-        reset_5h = self._longest_reset(t, max_hours=4)
-        reset_7d = self._longest_reset(t, max_hours=23)
-
-        return f"{t['tooltip_title']}\n5h: 100% ({reset_5h})\n7d: 100% ({reset_7d})"
+    _WORST_CASE_LABEL = 'Premium Interactions'  # longest of chat/completions/premium_interactions
 
     def test_all_locales_fit_tooltip(self):
         """Every locale's worst-case tooltip must fit in 127 characters."""
         for locale_file in sorted(LOCALE_DIR.glob('*.json')):
             with self.subTest(locale=locale_file.stem):
                 t = json.loads(locale_file.read_text(encoding='utf-8'))
-                tooltip = self._worst_case_tooltip(t)
+                tooltip = f"{t['tooltip_title']}\n{self._WORST_CASE_LABEL}: 100%"
                 self.assertLessEqual(
                     len(tooltip), self.TOOLTIP_MAX,
                     f"Locale '{locale_file.stem}' tooltip is {len(tooltip)} chars "
@@ -934,90 +828,90 @@ class TestTooltipMaxLength(unittest.TestCase):
 class TestFormatCredits(unittest.TestCase):
     """Tests for format_credits()."""
 
-    @patch('usage_monitor_for_codex.formatting._SYSTEM_CURRENCY_SYMBOL', '$')
-    @patch('usage_monitor_for_codex.formatting.CURRENCY_SYMBOL', None)
-    @patch('usage_monitor_for_codex.formatting._locale.currency', return_value='$4.20')
+    @patch('usage_monitor_for_copilot.formatting._SYSTEM_CURRENCY_SYMBOL', '$')
+    @patch('usage_monitor_for_copilot.formatting.CURRENCY_SYMBOL', None)
+    @patch('usage_monitor_for_copilot.formatting._locale.currency', return_value='$4.20')
     def test_uses_locale_currency(self, mock_currency):
         """Uses locale.currency() for formatting."""
         self.assertEqual(format_credits(420.0), '$4.20')
         mock_currency.assert_called_once_with(4.2, grouping=True)
 
-    @patch('usage_monitor_for_codex.formatting._SYSTEM_CURRENCY_SYMBOL', '€')
-    @patch('usage_monitor_for_codex.formatting.CURRENCY_SYMBOL', '$')
-    @patch('usage_monitor_for_codex.formatting._locale.currency', return_value='10,00 €')
+    @patch('usage_monitor_for_copilot.formatting._SYSTEM_CURRENCY_SYMBOL', '€')
+    @patch('usage_monitor_for_copilot.formatting.CURRENCY_SYMBOL', '$')
+    @patch('usage_monitor_for_copilot.formatting._locale.currency', return_value='10,00 €')
     def test_symbol_override_replaces(self, mock_currency):
         """Settings override replaces system symbol in formatted output."""
         self.assertEqual(format_credits(1000.0), '10,00 $')
 
-    @patch('usage_monitor_for_codex.formatting._SYSTEM_CURRENCY_SYMBOL', '')
-    @patch('usage_monitor_for_codex.formatting.CURRENCY_SYMBOL', None)
-    @patch('usage_monitor_for_codex.formatting._locale.currency', side_effect=ValueError)
+    @patch('usage_monitor_for_copilot.formatting._SYSTEM_CURRENCY_SYMBOL', '')
+    @patch('usage_monitor_for_copilot.formatting.CURRENCY_SYMBOL', None)
+    @patch('usage_monitor_for_copilot.formatting._locale.currency', side_effect=ValueError)
     def test_no_symbol_plain_number(self, mock_currency):
         """No currency symbol falls back to plain number."""
         self.assertEqual(format_credits(420.0), '4.20')
 
-    @patch('usage_monitor_for_codex.formatting._SYSTEM_CURRENCY_SYMBOL', '')
-    @patch('usage_monitor_for_codex.formatting.CURRENCY_SYMBOL', '¥')
-    @patch('usage_monitor_for_codex.formatting._locale.currency', side_effect=ValueError)
+    @patch('usage_monitor_for_copilot.formatting._SYSTEM_CURRENCY_SYMBOL', '')
+    @patch('usage_monitor_for_copilot.formatting.CURRENCY_SYMBOL', '¥')
+    @patch('usage_monitor_for_copilot.formatting._locale.currency', side_effect=ValueError)
     def test_locale_error_uses_symbol_fallback(self, mock_currency):
         """Locale error falls back to manual formatting with symbol."""
-        self.assertEqual(format_credits(420.0), '¥\u00a04.20')
+        self.assertEqual(format_credits(420.0), '¥ 4.20')
 
-    @patch('usage_monitor_for_codex.formatting._SYSTEM_CURRENCY_SYMBOL', '$')
-    @patch('usage_monitor_for_codex.formatting.CURRENCY_SYMBOL', None)
-    @patch('usage_monitor_for_codex.formatting._locale.currency', return_value='$0.00')
+    @patch('usage_monitor_for_copilot.formatting._SYSTEM_CURRENCY_SYMBOL', '$')
+    @patch('usage_monitor_for_copilot.formatting.CURRENCY_SYMBOL', None)
+    @patch('usage_monitor_for_copilot.formatting._locale.currency', return_value='$0.00')
     def test_zero_cents(self, mock_currency):
         """Zero cents formats correctly."""
         self.assertEqual(format_credits(0.0), '$0.00')
 
-    @patch('usage_monitor_for_codex.formatting._SYSTEM_CURRENCY_SYMBOL', '$')
-    @patch('usage_monitor_for_codex.formatting.CURRENCY_SYMBOL', None)
-    @patch('usage_monitor_for_codex.formatting._locale.currency', return_value='$10.00')
+    @patch('usage_monitor_for_copilot.formatting._SYSTEM_CURRENCY_SYMBOL', '$')
+    @patch('usage_monitor_for_copilot.formatting.CURRENCY_SYMBOL', None)
+    @patch('usage_monitor_for_copilot.formatting._locale.currency', return_value='$10.00')
     def test_api_currency_overrides_system_symbol(self, mock_currency):
         """The API billing currency replaces the system symbol when they differ."""
         self.assertEqual(format_credits(1000.0, 'EUR'), '€10.00')
 
-    @patch('usage_monitor_for_codex.formatting._SYSTEM_CURRENCY_SYMBOL', '€')
-    @patch('usage_monitor_for_codex.formatting.CURRENCY_SYMBOL', 'CHF')
-    @patch('usage_monitor_for_codex.formatting._locale.currency', return_value='10,00 €')
+    @patch('usage_monitor_for_copilot.formatting._SYSTEM_CURRENCY_SYMBOL', '€')
+    @patch('usage_monitor_for_copilot.formatting.CURRENCY_SYMBOL', 'CHF')
+    @patch('usage_monitor_for_copilot.formatting._locale.currency', return_value='10,00 €')
     def test_user_override_wins_over_api_currency(self, mock_currency):
         """An explicit currency_symbol override takes precedence over the API currency."""
         self.assertEqual(format_credits(1000.0, 'USD'), '10,00 CHF')
 
-    @patch('usage_monitor_for_codex.formatting._SYSTEM_CURRENCY_SYMBOL', '$')
-    @patch('usage_monitor_for_codex.formatting.CURRENCY_SYMBOL', '$')
-    @patch('usage_monitor_for_codex.formatting._locale.currency', return_value='$10.00')
+    @patch('usage_monitor_for_copilot.formatting._SYSTEM_CURRENCY_SYMBOL', '$')
+    @patch('usage_monitor_for_copilot.formatting.CURRENCY_SYMBOL', '$')
+    @patch('usage_monitor_for_copilot.formatting._locale.currency', return_value='$10.00')
     def test_override_equal_to_system_symbol_wins_over_api_currency(self, mock_currency):
         """An override that happens to equal the system symbol still takes
         precedence over the API billing currency (e.g. forcing dollars on an
         en-US system for an account billed in EUR)."""
         self.assertEqual(format_credits(1000.0, 'EUR'), '$10.00')
 
-    @patch('usage_monitor_for_codex.formatting._SYSTEM_CURRENCY_SYMBOL', '€')
-    @patch('usage_monitor_for_codex.formatting.CURRENCY_SYMBOL', '')
-    @patch('usage_monitor_for_codex.formatting._locale.currency', return_value='10,00 €')
+    @patch('usage_monitor_for_copilot.formatting._SYSTEM_CURRENCY_SYMBOL', '€')
+    @patch('usage_monitor_for_copilot.formatting.CURRENCY_SYMBOL', '')
+    @patch('usage_monitor_for_copilot.formatting._locale.currency', return_value='10,00 €')
     def test_empty_override_suppresses_symbol(self, mock_currency):
         """An empty currency_symbol override means "no symbol" in the locale
         formatting path too, not only in the fallback path."""
         self.assertEqual(format_credits(1000.0), '10,00')
 
-    @patch('usage_monitor_for_codex.formatting._SYSTEM_CURRENCY_SYMBOL', '')
-    @patch('usage_monitor_for_codex.formatting.CURRENCY_SYMBOL', None)
-    @patch('usage_monitor_for_codex.formatting._locale.currency', side_effect=ValueError)
+    @patch('usage_monitor_for_copilot.formatting._SYSTEM_CURRENCY_SYMBOL', '')
+    @patch('usage_monitor_for_copilot.formatting.CURRENCY_SYMBOL', None)
+    @patch('usage_monitor_for_copilot.formatting._locale.currency', side_effect=ValueError)
     def test_decimal_places_zero_divides_by_one(self, mock_currency):
         """decimal_places=0 treats the amount as whole units (no /100)."""
         self.assertEqual(format_credits(1000.0, 'JPY', 0), '¥ 1000')
 
-    @patch('usage_monitor_for_codex.formatting._SYSTEM_CURRENCY_SYMBOL', '$')
-    @patch('usage_monitor_for_codex.formatting.CURRENCY_SYMBOL', None)
-    @patch('usage_monitor_for_codex.formatting._locale.currency', side_effect=ValueError)
+    @patch('usage_monitor_for_copilot.formatting._SYSTEM_CURRENCY_SYMBOL', '$')
+    @patch('usage_monitor_for_copilot.formatting.CURRENCY_SYMBOL', None)
+    @patch('usage_monitor_for_copilot.formatting._locale.currency', side_effect=ValueError)
     def test_unknown_currency_uses_iso_code(self, mock_currency):
         """An unmapped currency code is shown verbatim as the symbol."""
         self.assertEqual(format_credits(500.0, 'XYZ'), 'XYZ 5.00')
 
-    @patch('usage_monitor_for_codex.formatting._SYSTEM_CURRENCY_SYMBOL', '$')
-    @patch('usage_monitor_for_codex.formatting.CURRENCY_SYMBOL', None)
-    @patch('usage_monitor_for_codex.formatting._locale.currency', return_value='$1.00')
+    @patch('usage_monitor_for_copilot.formatting._SYSTEM_CURRENCY_SYMBOL', '$')
+    @patch('usage_monitor_for_copilot.formatting.CURRENCY_SYMBOL', None)
+    @patch('usage_monitor_for_copilot.formatting._locale.currency', return_value='$1.00')
     def test_decimal_places_scales_amount(self, mock_currency):
         """decimal_places controls the minor-unit divisor passed to locale.currency."""
         format_credits(1000.0, 'USD', 3)

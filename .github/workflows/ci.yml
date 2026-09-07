@@ -29,6 +29,6 @@ jobs:
           PYSTRAY_BACKEND: ${{ runner.os == 'Linux' && 'dummy' || 'win32' }}
         run: python -m unittest discover -s tests -q
       - name: Compile package
-        run: python -m compileall -q usage_monitor_for_codex
+        run: python -m compileall -q usage_monitor_for_copilot
       - name: Type check
         run: python -m pyright

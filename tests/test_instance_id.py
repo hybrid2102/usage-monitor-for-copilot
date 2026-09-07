@@ -13,7 +13,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
-from usage_monitor_for_codex.instance_id import config_dir_suffix, effective_config_dir, is_default_config_dir, parse_config_dir
+from usage_monitor_for_copilot.instance_id import config_dir_suffix, effective_config_dir, is_default_config_dir, parse_config_dir
 
 
 class TestParseConfigDir(unittest.TestCase):
@@ -48,19 +48,19 @@ class TestParseConfigDir(unittest.TestCase):
     def test_expands_environment_variables(self):
         """%VAR% syntax works even from shells that do not expand it (PowerShell)."""
         with patch.dict('os.environ', {'USERPROFILE': r'C:\Users\test'}):
-            result = parse_config_dir(['app.exe', '--config-dir=%USERPROFILE%\\.codex-second'])
-        self.assertEqual(result, r'C:\Users\test\.codex-second')
+            result = parse_config_dir(['app.exe', '--config-dir=%USERPROFILE%\\.copilot-second'])
+        self.assertEqual(result, r'C:\Users\test\.copilot-second')
 
     @unittest.skipIf(sys.platform == 'win32', '$VAR is the POSIX form')
     def test_expands_posix_environment_variables(self):
         """$VAR syntax is expanded so the flag behaves the same from any shell."""
-        result = parse_config_dir(['app', '--config-dir=$HOME/.codex-second'])
-        self.assertEqual(result, str(Path.home() / '.codex-second'))
+        result = parse_config_dir(['app', '--config-dir=$HOME/.copilot-second'])
+        self.assertEqual(result, str(Path.home() / '.copilot-second'))
 
     def test_expands_tilde(self):
         """A leading ~ is expanded, so shortcut targets work unchanged."""
-        result = parse_config_dir(['app', '--config-dir=~/.codex-second'])
-        self.assertEqual(result, str(Path.home() / '.codex-second'))
+        result = parse_config_dir(['app', '--config-dir=~/.copilot-second'])
+        self.assertEqual(result, str(Path.home() / '.copilot-second'))
 
     def test_last_occurrence_wins(self):
         argv = ['app.exe', '--config-dir=C:\\first', '--config-dir=C:\\second']
@@ -86,22 +86,22 @@ class TestConfigDirSuffix(unittest.TestCase):
     def test_default_when_env_unset(self):
         with patch.dict('os.environ', {}, clear=False):
             import os
-            os.environ.pop('CODEX_HOME', None)
+            os.environ.pop('COPILOT_HOME', None)
             self.assertTrue(is_default_config_dir())
             self.assertEqual(config_dir_suffix(), '')
 
-    def test_default_when_env_points_to_home_codex(self):
+    def test_default_when_env_points_to_home_copilot(self):
         with TemporaryDirectory() as home_tmp:
-            codex_dir = Path(home_tmp) / '.codex'
-            codex_dir.mkdir()
+            copilot_dir = Path(home_tmp) / '.copilot'
+            copilot_dir.mkdir()
             with patch.object(Path, 'home', return_value=Path(home_tmp)), \
-                 patch.dict('os.environ', {'CODEX_HOME': str(codex_dir)}):
+                 patch.dict('os.environ', {'COPILOT_HOME': str(copilot_dir)}):
                 self.assertTrue(is_default_config_dir())
                 self.assertEqual(config_dir_suffix(), '')
 
     def test_custom_dir_produces_suffix(self):
         with TemporaryDirectory() as config_tmp:
-            with patch.dict('os.environ', {'CODEX_HOME': config_tmp}):
+            with patch.dict('os.environ', {'COPILOT_HOME': config_tmp}):
                 self.assertFalse(is_default_config_dir())
                 suffix = config_dir_suffix()
         self.assertTrue(suffix.startswith('_'))
@@ -110,18 +110,18 @@ class TestConfigDirSuffix(unittest.TestCase):
     @unittest.skipUnless(sys.platform == 'win32', 'only Windows paths ignore casing')
     def test_suffix_stable_across_casing_and_trailing_slash(self):
         with TemporaryDirectory() as config_tmp:
-            with patch.dict('os.environ', {'CODEX_HOME': config_tmp}):
+            with patch.dict('os.environ', {'COPILOT_HOME': config_tmp}):
                 suffix_plain = config_dir_suffix()
-            with patch.dict('os.environ', {'CODEX_HOME': config_tmp.upper() + '\\'}):
+            with patch.dict('os.environ', {'COPILOT_HOME': config_tmp.upper() + '\\'}):
                 suffix_variant = config_dir_suffix()
         self.assertEqual(suffix_plain, suffix_variant)
 
     def test_suffix_stable_across_trailing_separator(self):
         """A trailing separator names the same directory and must not split instances."""
         with TemporaryDirectory() as config_tmp:
-            with patch.dict('os.environ', {'CODEX_HOME': config_tmp}):
+            with patch.dict('os.environ', {'COPILOT_HOME': config_tmp}):
                 suffix_plain = config_dir_suffix()
-            with patch.dict('os.environ', {'CODEX_HOME': config_tmp + os.sep}):
+            with patch.dict('os.environ', {'COPILOT_HOME': config_tmp + os.sep}):
                 suffix_variant = config_dir_suffix()
         self.assertEqual(suffix_plain, suffix_variant)
 
@@ -129,23 +129,23 @@ class TestConfigDirSuffix(unittest.TestCase):
     def test_suffix_differs_by_casing_on_posix(self):
         """Different casing names a different directory, so it is a different instance."""
         with TemporaryDirectory() as config_tmp:
-            with patch.dict('os.environ', {'CODEX_HOME': config_tmp}):
+            with patch.dict('os.environ', {'COPILOT_HOME': config_tmp}):
                 suffix_plain = config_dir_suffix()
-            with patch.dict('os.environ', {'CODEX_HOME': config_tmp.upper()}):
+            with patch.dict('os.environ', {'COPILOT_HOME': config_tmp.upper()}):
                 suffix_variant = config_dir_suffix()
         self.assertNotEqual(suffix_plain, suffix_variant)
 
     def test_different_dirs_produce_different_suffixes(self):
         with TemporaryDirectory() as dir_a, TemporaryDirectory() as dir_b:
-            with patch.dict('os.environ', {'CODEX_HOME': dir_a}):
+            with patch.dict('os.environ', {'COPILOT_HOME': dir_a}):
                 suffix_a = config_dir_suffix()
-            with patch.dict('os.environ', {'CODEX_HOME': dir_b}):
+            with patch.dict('os.environ', {'COPILOT_HOME': dir_b}):
                 suffix_b = config_dir_suffix()
         self.assertNotEqual(suffix_a, suffix_b)
 
     def test_effective_config_dir_resolves_env_value(self):
         with TemporaryDirectory() as config_tmp:
-            with patch.dict('os.environ', {'CODEX_HOME': config_tmp}):
+            with patch.dict('os.environ', {'COPILOT_HOME': config_tmp}):
                 self.assertEqual(effective_config_dir(), Path(config_tmp).resolve())
 
 

@@ -11,7 +11,7 @@ from unittest.mock import MagicMock, call, patch
 
 from PIL import Image, ImageDraw
 
-import usage_monitor_for_codex.tray_icon as tray_icon_mod
+import usage_monitor_for_copilot.tray_icon as tray_icon_mod
 
 
 def setUpModule():
@@ -120,9 +120,19 @@ class TestCreateIconImage(unittest.TestCase):
         self.assertEqual(img.size, (64, 64))
 
     def test_dark_and_light_taskbar_produce_different_images(self):
-        """Dark vs light taskbar produces different pixel data."""
-        img_dark = tray_icon_mod.create_icon_image(50, 50, light_taskbar=False)
-        img_light = tray_icon_mod.create_icon_image(50, 50, light_taskbar=True)
+        """Dark vs light taskbar produces different pixel data when their palettes differ.
+
+        Patches ICON_DARK/ICON_LIGHT to guaranteed-distinct colors rather than
+        relying on the ambient default: a real settings file may legitimately
+        set both palettes to the same color (e.g. a single custom tray-icon
+        color applied uniformly regardless of taskbar theme), which would
+        make this assertion fail for a reason unrelated to what it tests -
+        whether light_taskbar actually selects between the two palettes.
+        """
+        with patch.object(tray_icon_mod, 'ICON_DARK', {'fg': (0, 0, 0, 255), 'fg_half': (0, 0, 0, 80), 'fg_dim': (0, 0, 0, 140), 'fg_warn': (224, 80, 80, 255)}), \
+                patch.object(tray_icon_mod, 'ICON_LIGHT', {'fg': (255, 255, 255, 255), 'fg_half': (255, 255, 255, 80), 'fg_dim': (255, 255, 255, 140), 'fg_warn': (224, 80, 80, 255)}):
+            img_dark = tray_icon_mod.create_icon_image(50, 50, light_taskbar=False)
+            img_light = tray_icon_mod.create_icon_image(50, 50, light_taskbar=True)
 
         self.assertEqual(img_dark.size, (64, 64))
         self.assertEqual(img_light.size, (64, 64))
@@ -143,7 +153,7 @@ class TestCreateIconImage(unittest.TestCase):
         self.assertNotEqual(img_full.tobytes(), img_zero.tobytes())
 
     def test_boundary_zero_differs_from_one(self):
-        """0% (shows '>') and 1% (shows percentage) produce different icons."""
+        """0% (shows '^') and 1% (shows percentage) produce different icons."""
         img_zero = tray_icon_mod.create_icon_image(0, 0)
         img_one = tray_icon_mod.create_icon_image(1, 0)
 
@@ -151,7 +161,7 @@ class TestCreateIconImage(unittest.TestCase):
 
     @patch.object(tray_icon_mod, 'load_font')
     def test_zero_usage_calls_font_size_42(self, mock_font):
-        """Usage of 0% requests size 42 font for the terminal prompt."""
+        """Usage of 0% requests size 42 font for the idle chevron."""
         mock_font.return_value = _real_font()
 
         tray_icon_mod.create_icon_image(0, 0)

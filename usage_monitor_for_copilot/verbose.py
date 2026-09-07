@@ -5,7 +5,7 @@ Verbose Diagnostics
 Prints system, environment and runtime diagnostics for ``--verbose``.
 
 The report skeleton lives here; every probe that differs per operating
-system comes from :mod:`usage_monitor_for_codex.platforms` as ready-made
+system comes from :mod:`usage_monitor_for_copilot.platforms` as ready-made
 label/value rows.
 """
 from __future__ import annotations
@@ -16,7 +16,7 @@ import os
 import sys
 from pathlib import Path
 
-from .codex_cli import refresh_token
+from .copilot_cli import refresh_token
 from .platforms import (
     DIAGNOSTIC_PACKAGES, diagnostic_display_rows, diagnostic_post_init_rows,
     diagnostic_runtime_rows, diagnostic_system_rows, setup_console,
@@ -48,7 +48,7 @@ def _redact_home(path_str: str) -> str:
     """Replace the user's home directory with ``~`` to avoid exposing the username.
 
     Case-insensitive (Windows paths compare that way, and e.g. a
-    ``CODEX_HOME`` set externally may be differently cased) and
+    ``COPILOT_HOME`` set externally may be differently cased) and
     boundary-aware, so a sibling profile whose name merely starts with the
     username is not partially redacted.
     """
@@ -74,7 +74,7 @@ def print_startup_diagnostics() -> None:
     """Print system and environment diagnostics before webview starts."""
     from . import __version__
 
-    print(f'\n  Usage Monitor for Codex v{__version__} - Verbose Mode')
+    print(f'\n  Usage Monitor for Copilot v{__version__} - Verbose Mode')
     print(f'  {"=" * 48}')
 
     _section('System')
@@ -94,7 +94,7 @@ def print_startup_diagnostics() -> None:
     _row('System locale', f'{sys_locale[0]}, {sys_locale[1]}' if sys_locale[0] else 'not set')
     _row('Filesystem encoding', sys.getfilesystemencoding())
     _row('Default encoding', sys.getdefaultencoding())
-    _row('CODEX_HOME', _redact_home(os.environ.get('CODEX_HOME', '')) or '(not set)')
+    _row('COPILOT_HOME', _redact_home(os.environ.get('COPILOT_HOME', '')) or '(not set)')
 
     _section('Display')
     for label, value in diagnostic_display_rows():
@@ -109,7 +109,7 @@ def print_startup_diagnostics() -> None:
         _row(package, _package_version(package))
 
     _section('Account')
-    _row('Codex CLI login', _login_status())
+    _row('Copilot CLI login', _login_status())
 
     print()
 

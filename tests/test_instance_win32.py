@@ -16,12 +16,12 @@ from unittest.mock import MagicMock, patch
 if sys.platform != 'win32':
     raise unittest.SkipTest('Win32 single-instance guard is only importable on Windows')
 
-MODULE = 'usage_monitor_for_codex.platforms.instance_win32'
+MODULE = 'usage_monitor_for_copilot.platforms.instance_win32'
 
 
 def _reset_globals():
     """Reset module-level handles to None between tests."""
-    import usage_monitor_for_codex.platforms.instance_win32 as si
+    import usage_monitor_for_copilot.platforms.instance_win32 as si
     si._mutex_handle = None
     si._pid_mapping_handle = None
 
@@ -44,7 +44,7 @@ class TestSharedMemoryRoundTrip(unittest.TestCase):
         self._isolated_names.start()
 
     def tearDown(self):
-        import usage_monitor_for_codex.platforms.instance_win32 as si
+        import usage_monitor_for_copilot.platforms.instance_win32 as si
         if si._pid_mapping_handle:
             si._kernel32.CloseHandle(si._pid_mapping_handle)
             si._pid_mapping_handle = None
@@ -52,7 +52,7 @@ class TestSharedMemoryRoundTrip(unittest.TestCase):
 
     def _live_record(self):
         """Read the holder record under the real (non-test) object name."""
-        import usage_monitor_for_codex.platforms.instance_win32 as si
+        import usage_monitor_for_copilot.platforms.instance_win32 as si
 
         self._isolated_names.stop()
         try:
@@ -62,7 +62,7 @@ class TestSharedMemoryRoundTrip(unittest.TestCase):
 
     @patch(f'{MODULE}.__version__', '2.5.3')
     def test_round_trip_returns_pid_and_version(self):
-        from usage_monitor_for_codex.platforms.instance_win32 import _read_holder_info, _store_holder_info
+        from usage_monitor_for_copilot.platforms.instance_win32 import _read_holder_info, _store_holder_info
 
         _store_holder_info()
         pid, version = _read_holder_info()
@@ -72,7 +72,7 @@ class TestSharedMemoryRoundTrip(unittest.TestCase):
 
     @patch(f'{MODULE}.__version__', '0.0.1')
     def test_round_trip_short_version(self):
-        from usage_monitor_for_codex.platforms.instance_win32 import _read_holder_info, _store_holder_info
+        from usage_monitor_for_copilot.platforms.instance_win32 import _read_holder_info, _store_holder_info
 
         _store_holder_info()
         pid, version = _read_holder_info()
@@ -83,7 +83,7 @@ class TestSharedMemoryRoundTrip(unittest.TestCase):
     @patch(f'{MODULE}.__version__', 'a' * 100)
     def test_long_version_is_truncated(self):
         """Version strings exceeding shared memory size are truncated, not crashed."""
-        from usage_monitor_for_codex.platforms.instance_win32 import _read_holder_info, _store_holder_info
+        from usage_monitor_for_copilot.platforms.instance_win32 import _read_holder_info, _store_holder_info
 
         _store_holder_info()
         pid, version = _read_holder_info()
@@ -99,7 +99,7 @@ class TestSharedMemoryRoundTrip(unittest.TestCase):
         The record then outlives the test process (the live instance keeps the
         mapping alive), and a later "replace running instance" targets a dead PID
         and fails."""
-        import usage_monitor_for_codex.platforms.instance_win32 as si
+        import usage_monitor_for_copilot.platforms.instance_win32 as si
 
         before = self._live_record()
         si._store_holder_info()
@@ -130,7 +130,7 @@ class TestEnsureSingleInstance(unittest.TestCase):
         mock_kernel32.CreateMutexW.return_value = 42
 
         with patch(f'{MODULE}._kernel32', mock_kernel32):
-            from usage_monitor_for_codex.platforms.instance_win32 import ensure_single_instance
+            from usage_monitor_for_copilot.platforms.instance_win32 import ensure_single_instance
             result = ensure_single_instance()
 
         self.assertTrue(result)
@@ -154,7 +154,7 @@ class TestEnsureSingleInstance(unittest.TestCase):
         with patch(f'{MODULE}._kernel32', mock_kernel32), \
              patch(f'{MODULE}.ask_yes_no', mock_ask), \
              patch(f'{MODULE}.show_topmost_error', mock_error):
-            from usage_monitor_for_codex.platforms.instance_win32 import ensure_single_instance
+            from usage_monitor_for_copilot.platforms.instance_win32 import ensure_single_instance
             result = ensure_single_instance()
 
         self.assertTrue(result)
@@ -179,7 +179,7 @@ class TestEnsureSingleInstance(unittest.TestCase):
         with patch(f'{MODULE}._kernel32', mock_kernel32), \
              patch(f'{MODULE}.ask_yes_no', mock_ask), \
              patch(f'{MODULE}.show_topmost_error', mock_error):
-            from usage_monitor_for_codex.platforms.instance_win32 import ensure_single_instance
+            from usage_monitor_for_copilot.platforms.instance_win32 import ensure_single_instance
             result = ensure_single_instance()
 
         self.assertFalse(result)
@@ -205,7 +205,7 @@ class TestEnsureSingleInstance(unittest.TestCase):
         with patch(f'{MODULE}._kernel32', mock_kernel32), \
              patch(f'{MODULE}.ask_yes_no', mock_ask), \
              patch(f'{MODULE}.show_topmost_error', mock_error):
-            from usage_monitor_for_codex.platforms.instance_win32 import ensure_single_instance
+            from usage_monitor_for_copilot.platforms.instance_win32 import ensure_single_instance
             result = ensure_single_instance()
 
         self.assertFalse(result)
@@ -228,7 +228,7 @@ class TestEnsureSingleInstance(unittest.TestCase):
              patch(f'{MODULE}._kernel32', mock_kernel32), \
              patch(f'{MODULE}.ask_yes_no', mock_ask), \
              patch(f'{MODULE}.show_topmost_error', mock_error):
-            from usage_monitor_for_codex.platforms.instance_win32 import ensure_single_instance
+            from usage_monitor_for_copilot.platforms.instance_win32 import ensure_single_instance
             result = ensure_single_instance()
 
         self.assertTrue(result)
@@ -252,7 +252,7 @@ class TestEnsureSingleInstance(unittest.TestCase):
              patch(f'{MODULE}._kernel32', mock_kernel32), \
              patch(f'{MODULE}.ask_yes_no', mock_ask), \
              patch(f'{MODULE}.show_topmost_error', mock_error):
-            from usage_monitor_for_codex.platforms.instance_win32 import ensure_single_instance
+            from usage_monitor_for_copilot.platforms.instance_win32 import ensure_single_instance
             result = ensure_single_instance()
 
         self.assertFalse(result)
@@ -276,7 +276,7 @@ class TestEnsureSingleInstance(unittest.TestCase):
         with patch(f'{MODULE}._kernel32', mock_kernel32), \
              patch(f'{MODULE}.ask_yes_no', mock_ask), \
              patch(f'{MODULE}.show_topmost_error', mock_error):
-            from usage_monitor_for_codex.platforms.instance_win32 import ensure_single_instance
+            from usage_monitor_for_copilot.platforms.instance_win32 import ensure_single_instance
             result = ensure_single_instance()
 
         self.assertTrue(result)
@@ -297,7 +297,7 @@ class TestEnsureSingleInstance(unittest.TestCase):
         with patch(f'{MODULE}._kernel32', mock_kernel32), \
              patch(f'{MODULE}.ask_yes_no', mock_ask), \
              patch(f'{MODULE}.show_topmost_error', mock_error):
-            from usage_monitor_for_codex.platforms.instance_win32 import ensure_single_instance
+            from usage_monitor_for_copilot.platforms.instance_win32 import ensure_single_instance
             result = ensure_single_instance()
 
         self.assertFalse(result)
@@ -316,7 +316,7 @@ class TestEnsureSingleInstance(unittest.TestCase):
         with patch(f'{MODULE}._kernel32', mock_kernel32), \
              patch(f'{MODULE}.ask_yes_no', mock_ask), \
              patch(f'{MODULE}.show_topmost_error', mock_error):
-            from usage_monitor_for_codex.platforms.instance_win32 import ensure_single_instance
+            from usage_monitor_for_copilot.platforms.instance_win32 import ensure_single_instance
             ensure_single_instance()
 
         title = mock_ask.call_args[0][1]
@@ -336,7 +336,7 @@ class TestEnsureSingleInstance(unittest.TestCase):
         with patch(f'{MODULE}._kernel32', mock_kernel32), \
              patch(f'{MODULE}.ask_yes_no', mock_ask), \
              patch(f'{MODULE}.show_topmost_error', mock_error):
-            from usage_monitor_for_codex.platforms.instance_win32 import ensure_single_instance
+            from usage_monitor_for_copilot.platforms.instance_win32 import ensure_single_instance
             ensure_single_instance()
 
         message = mock_ask.call_args[0][0]
@@ -359,7 +359,7 @@ class TestEnsureSingleInstance(unittest.TestCase):
         with patch(f'{MODULE}._kernel32', mock_kernel32), \
              patch(f'{MODULE}.ask_yes_no', mock_ask), \
              patch(f'{MODULE}.show_topmost_error', mock_error):
-            from usage_monitor_for_codex.platforms.instance_win32 import ensure_single_instance
+            from usage_monitor_for_copilot.platforms.instance_win32 import ensure_single_instance
             result = ensure_single_instance()
 
         self.assertFalse(result)
@@ -382,7 +382,7 @@ class TestEnsureSingleInstance(unittest.TestCase):
         with patch(f'{MODULE}._kernel32', mock_kernel32), \
              patch(f'{MODULE}.ask_yes_no', mock_ask), \
              patch(f'{MODULE}.show_topmost_error', mock_error):
-            from usage_monitor_for_codex.platforms.instance_win32 import ensure_single_instance
+            from usage_monitor_for_copilot.platforms.instance_win32 import ensure_single_instance
             result = ensure_single_instance()
 
         self.assertFalse(result)
@@ -399,32 +399,32 @@ class TestObjectNames(unittest.TestCase):
 
     def test_default_config_dir_uses_legacy_names(self):
         """Default config dir keeps the unsuffixed names for cross-version detection."""
-        import usage_monitor_for_codex.platforms.instance_win32 as si
+        import usage_monitor_for_copilot.platforms.instance_win32 as si
 
         with patch(f'{MODULE}.config_dir_suffix', return_value=''):
             mutex_name, mapping_name = si._object_names()
 
-        self.assertEqual(mutex_name, 'UsageMonitorForCodex_SingleInstance')
-        self.assertEqual(mapping_name, 'UsageMonitorForCodex_HolderPID')
+        self.assertEqual(mutex_name, 'UsageMonitorForCopilot_SingleInstance')
+        self.assertEqual(mapping_name, 'UsageMonitorForCopilot_HolderPID')
 
     def test_custom_config_dir_appends_suffix(self):
         """A custom config dir yields suffixed, per-instance names."""
-        import usage_monitor_for_codex.platforms.instance_win32 as si
+        import usage_monitor_for_copilot.platforms.instance_win32 as si
 
         with patch(f'{MODULE}.config_dir_suffix', return_value='_abc123def456'):
             mutex_name, mapping_name = si._object_names()
 
-        self.assertEqual(mutex_name, 'UsageMonitorForCodex_SingleInstance_abc123def456')
-        self.assertEqual(mapping_name, 'UsageMonitorForCodex_HolderPID_abc123def456')
+        self.assertEqual(mutex_name, 'UsageMonitorForCopilot_SingleInstance_abc123def456')
+        self.assertEqual(mapping_name, 'UsageMonitorForCopilot_HolderPID_abc123def456')
 
     def test_two_config_dirs_get_distinct_names(self):
         """Two different config dirs never collide on kernel object names."""
-        import usage_monitor_for_codex.platforms.instance_win32 as si
+        import usage_monitor_for_copilot.platforms.instance_win32 as si
 
         with TemporaryDirectory() as dir_a, TemporaryDirectory() as dir_b:
-            with patch.dict('os.environ', {'CODEX_HOME': dir_a}):
+            with patch.dict('os.environ', {'COPILOT_HOME': dir_a}):
                 names_a = si._object_names()
-            with patch.dict('os.environ', {'CODEX_HOME': dir_b}):
+            with patch.dict('os.environ', {'COPILOT_HOME': dir_b}):
                 names_b = si._object_names()
 
         self.assertNotEqual(names_a[0], names_b[0])
@@ -446,7 +446,7 @@ class TestReleaseInstanceLock(unittest.TestCase):
 
     def test_release_closes_both_handles(self):
         """Both mutex and mapping handles are closed and set to None."""
-        import usage_monitor_for_codex.platforms.instance_win32 as si
+        import usage_monitor_for_copilot.platforms.instance_win32 as si
         mock_kernel32 = MagicMock()
 
         si._mutex_handle = 100
@@ -461,7 +461,7 @@ class TestReleaseInstanceLock(unittest.TestCase):
 
     def test_release_with_no_handles_is_safe(self):
         """Calling release when no handles are held does not crash."""
-        import usage_monitor_for_codex.platforms.instance_win32 as si
+        import usage_monitor_for_copilot.platforms.instance_win32 as si
 
         si._mutex_handle = None
         si._pid_mapping_handle = None

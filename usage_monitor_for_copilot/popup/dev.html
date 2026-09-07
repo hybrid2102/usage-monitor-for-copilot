@@ -5,7 +5,7 @@
     the real locale/*.json files):
         python -m http.server 8080
 
-    Then open: http://localhost:8080/usage_monitor_for_codex/popup/dev.html
+    Then open: http://localhost:8080/usage_monitor_for_copilot/popup/dev.html
 -->
 <!DOCTYPE html>
 <html>
@@ -125,7 +125,7 @@ const PRESETS = {
         ],
         extra: null,
         installations: [{ name: 'CLI', version: '2.1.69' }],
-        status: () => ({ last_success_time: now() - 300, next_poll_time: now() + 30, refreshing: false, error: 'Could not connect to Codex App Server.' }),
+        status: () => ({ last_success_time: now() - 300, next_poll_time: now() + 30, refreshing: false, error: 'Could not connect to the Copilot CLI.' }),
     },
     refreshing: {
         profile: { email: 'user@example.com', plan: 'Max (Team)' },
@@ -157,7 +157,7 @@ let currentPreset = 'full';
 function buildTranslations(loc) {
     return {
         title: loc.popup_title, account: loc.account, email: loc.email, plan: loc.plan,
-        usage: loc.usage, extra_usage: loc.extra_usage, codex_code: loc.codex_code, changelog: loc.changelog,
+        usage: loc.usage, extra_usage: loc.extra_usage, copilot_code: loc.copilot_code, changelog: loc.changelog,
         status_updated_s: loc.status_updated_s, status_updated: loc.status_updated,
         status_next_update: loc.status_next_update, status_refreshing: loc.status_refreshing,
         duration_hm: loc.duration_hm, duration_m: loc.duration_m, duration_s: loc.duration_s,
@@ -215,7 +215,7 @@ function resolveData(name, loc) {
 }
 
 // Try both layouts: server rooted at the repo (dev.html under
-// /usage_monitor_for_codex/popup/) and at the package (dev.html under /popup/).
+// /usage_monitor_for_copilot/popup/) and at the package (dev.html under /popup/).
 async function loadLocale(code) {
     // Cache-buster so edits to the locale files show up without a hard reload.
     const bust = `?t=${Date.now()}`;
@@ -251,7 +251,7 @@ async function applyLanguage(code) {
         } } };
     // Demo set so toggling the pin button previews compact hiding of both
     // whole sections and an individual usage bar.
-    const compactHide = ['account', 'extra_usage', 'codex_code', 'status', 'one_hour_code_review'];
+    const compactHide = ['account', 'extra_usage', 'copilot_code', 'status', 'one_hour_code_review'];
     win().init({ colors: COLORS, t: buildTranslations(currentLocale), app_version: '1.13.0', compact_hide: compactHide, data: resolveData(currentPreset, currentLocale) });
 }
 

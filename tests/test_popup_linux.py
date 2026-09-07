@@ -17,7 +17,7 @@ from unittest.mock import MagicMock, call, patch
 if sys.platform == 'win32':
     raise unittest.SkipTest('GTK popup host is not used on Windows')
 
-from usage_monitor_for_codex.platforms.popup_linux import (  # noqa: E402
+from usage_monitor_for_copilot.platforms.popup_linux import (  # noqa: E402
     _KEY_ESCAPE, _MARGIN, WINDOW_KWARGS, PopupHost, popup_url,
 )
 

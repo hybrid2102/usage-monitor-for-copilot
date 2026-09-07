@@ -11,14 +11,14 @@ import threading
 import time
 import traceback
 import webbrowser
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Any
 
 import pystray  # type: ignore[import-untyped]  # no type stubs available
 
 from .api import api_headers, read_access_token
 from .cache import UsageCache
-from .codex_cli import PROJECT_URL
+from .copilot_cli import PROJECT_URL
 from .command import run_event_command
 from .instance_id import effective_config_dir, is_default_config_dir
 from .platforms import (
@@ -27,25 +27,26 @@ from .platforms import (
     taskbar_uses_light_theme, watch_theme_change,
 )
 from .settings import (
-    ALERT_EXTRA_USAGE_SPENT, ALERT_TIME_AWARE, ALERT_TIME_AWARE_BELOW, ICON_FIELDS, IDLE_INTERVAL, IDLE_PAUSE,
-    NOTIFY_CODEX_UPDATE, ON_RESET_COMMAND, ON_STARTUP_COMMAND, ON_THRESHOLD_COMMAND, POLL_ERROR, POLL_FAST,
+    ALERT_TIME_AWARE, ALERT_TIME_AWARE_BELOW, ICON_FIELDS, IDLE_INTERVAL, IDLE_PAUSE,
+    NOTIFY_COPILOT_UPDATE, ON_RESET_COMMAND, ON_STARTUP_COMMAND, ON_THRESHOLD_COMMAND, POLL_ERROR, POLL_FAST,
     POLL_FAST_EXTRA, POLL_INTERVAL, QUICK_ACTION_COMMAND, get_alert_thresholds,
 )
-from .formatting import elapsed_pct, field_period, format_credits, format_tooltip, parse_field_name, popup_label
+from .formatting import elapsed_pct, field_period, format_tooltip, popup_label
 from .i18n import T
 from .popup import UsagePopup
 from .tray_icon import create_icon_image, create_status_image
 
-__all__ = ['UsageMonitorForCodex', 'crash_log']
+__all__ = ['UsageMonitorForCopilot', 'crash_log']
 
 # Seconds after a reset at which to place the confirming poll.  A small buffer
 # absorbs minor timing differences (clocks, caches, server-side propagation).
 RESET_BUFFER = 5
 
-
-def _future_iso(**kwargs: float) -> str:
-    """Return an ISO 8601 timestamp offset from now by the given timedelta kwargs."""
-    return (datetime.now(timezone.utc) + timedelta(**kwargs)).isoformat()
+# Utilization a field must have exceeded before a drop counts as a reset
+# rather than noise.  Copilot field names carry no period the way
+# Claude/Codex's five_hour/seven_day naming does, so unlike that twin this
+# cannot vary the threshold by field - one value covers every quota type.
+RESET_DETECTION_THRESHOLD = 95
 
 
 def _align_to_reset(interval: int, next_reset: float | None) -> tuple[int, bool]:
@@ -98,8 +99,8 @@ def _align_to_reset(interval: int, next_reset: float | None) -> tuple[int, bool]
     return interval, False                     # reset still far - keep the normal cadence
 
 
-class UsageMonitorForCodex:
-    """System tray application displaying Codex usage."""
+class UsageMonitorForCopilot:
+    """System tray application displaying Copilot usage."""
 
     def __init__(self) -> None:
         """Set up the tray icon with context menu and polling state."""
@@ -134,7 +135,7 @@ class UsageMonitorForCodex:
         self.restart_requested = False
 
         # Non-default config dirs get a tooltip prefix so multiple
-        # instances (one per Codex account) can be told apart.
+        # instances (one per Copilot account) can be told apart.
         self._tooltip_prefix = '' if is_default_config_dir() else f'[{effective_config_dir().name}] '
 
         self.icon = pystray.Icon(
@@ -154,10 +155,8 @@ class UsageMonitorForCodex:
                     visible=autostart_supported(),
                 ),
                 pystray.MenuItem(T['test_commands'], pystray.Menu(
-                    pystray.MenuItem(T['test_reset_5h'], self.on_test_reset_5h, enabled=bool(ON_RESET_COMMAND)),
-                    pystray.MenuItem(T['test_reset_7d'], self.on_test_reset_7d, enabled=bool(ON_RESET_COMMAND)),
-                    pystray.MenuItem(T['test_threshold_5h'], self.on_test_threshold_5h, enabled=bool(ON_THRESHOLD_COMMAND)),
-                    pystray.MenuItem(T['test_threshold_7d'], self.on_test_threshold_7d, enabled=bool(ON_THRESHOLD_COMMAND)),
+                    pystray.MenuItem(T['test_reset'], self.on_test_reset, enabled=bool(ON_RESET_COMMAND)),
+                    pystray.MenuItem(T['test_threshold'], self.on_test_threshold, enabled=bool(ON_THRESHOLD_COMMAND)),
                     pystray.MenuItem(T['test_startup'], self.on_test_startup, enabled=bool(ON_STARTUP_COMMAND)),
                     pystray.MenuItem(T['test_quick_action'], self.on_test_quick_action, enabled=bool(QUICK_ACTION_COMMAND)),
                 ), enabled=bool(ON_RESET_COMMAND or ON_STARTUP_COMMAND or ON_THRESHOLD_COMMAND or QUICK_ACTION_COMMAND)),
@@ -207,61 +206,34 @@ class UsageMonitorForCodex:
     def on_open_project(self, icon: Any = None, item: Any = None) -> None:
         webbrowser.open(PROJECT_URL)
 
-    def on_test_reset_5h(self, icon: Any = None, item: Any = None) -> None:
+    def on_test_reset(self, icon: Any = None, item: Any = None) -> None:
         run_event_command(ON_RESET_COMMAND, {
             'USAGE_MONITOR_EVENT': 'reset',
-            'USAGE_MONITOR_VARIANT': 'five_hour',
+            'USAGE_MONITOR_VARIANT': 'premium_interactions',
             'USAGE_MONITOR_UTILIZATION': '0',
             'USAGE_MONITOR_PREV_UTILIZATION': '95',
-            'USAGE_MONITOR_UTILIZATION_FIVE_HOUR': '0',
-            'USAGE_MONITOR_UTILIZATION_SEVEN_DAY': '45',
-            'USAGE_MONITOR_RESETS_AT': _future_iso(hours=5),
+            'USAGE_MONITOR_UTILIZATION_PREMIUM_INTERACTIONS': '0',
+            'USAGE_MONITOR_RESETS_AT': '',
             'USAGE_MONITOR_TITLE': T['notify_reset_title'],
             'USAGE_MONITOR_MESSAGE': T['notify_reset'],
         }, capture_output=True)
 
-    def on_test_reset_7d(self, icon: Any = None, item: Any = None) -> None:
-        run_event_command(ON_RESET_COMMAND, {
-            'USAGE_MONITOR_EVENT': 'reset',
-            'USAGE_MONITOR_VARIANT': 'seven_day',
-            'USAGE_MONITOR_UTILIZATION': '0',
-            'USAGE_MONITOR_PREV_UTILIZATION': '99',
-            'USAGE_MONITOR_UTILIZATION_FIVE_HOUR': '12',
-            'USAGE_MONITOR_UTILIZATION_SEVEN_DAY': '0',
-            'USAGE_MONITOR_RESETS_AT': _future_iso(days=7),
-            'USAGE_MONITOR_TITLE': T['notify_reset_title'],
-            'USAGE_MONITOR_MESSAGE': T['notify_reset'],
-        }, capture_output=True)
-
-    def on_test_threshold_5h(self, icon: Any = None, item: Any = None) -> None:
+    def on_test_threshold(self, icon: Any = None, item: Any = None) -> None:
         run_event_command(ON_THRESHOLD_COMMAND, {
             'USAGE_MONITOR_EVENT': 'threshold',
-            'USAGE_MONITOR_VARIANT': 'five_hour',
+            'USAGE_MONITOR_VARIANT': 'premium_interactions',
             'USAGE_MONITOR_UTILIZATION': '82',
             'USAGE_MONITOR_THRESHOLD': '80',
-            'USAGE_MONITOR_RESETS_AT': _future_iso(hours=3),
+            'USAGE_MONITOR_RESETS_AT': '',
             'USAGE_MONITOR_TITLE': T['notify_threshold_title'],
-            'USAGE_MONITOR_MESSAGE': T['notify_threshold_generic'].format(label=popup_label('five_hour'), pct='82'),
-        }, capture_output=True)
-
-    def on_test_threshold_7d(self, icon: Any = None, item: Any = None) -> None:
-        run_event_command(ON_THRESHOLD_COMMAND, {
-            'USAGE_MONITOR_EVENT': 'threshold',
-            'USAGE_MONITOR_VARIANT': 'seven_day',
-            'USAGE_MONITOR_UTILIZATION': '81',
-            'USAGE_MONITOR_THRESHOLD': '80',
-            'USAGE_MONITOR_RESETS_AT': _future_iso(days=4),
-            'USAGE_MONITOR_TITLE': T['notify_threshold_title'],
-            'USAGE_MONITOR_MESSAGE': T['notify_threshold_generic'].format(label=popup_label('seven_day'), pct='81'),
+            'USAGE_MONITOR_MESSAGE': T['notify_threshold_generic'].format(label=popup_label('premium_interactions'), pct='82'),
         }, capture_output=True)
 
     def on_test_startup(self, icon: Any = None, item: Any = None) -> None:
         run_event_command(ON_STARTUP_COMMAND, {
             'USAGE_MONITOR_EVENT': 'startup',
-            'USAGE_MONITOR_UTILIZATION_FIVE_HOUR': '0',
-            'USAGE_MONITOR_RESETS_AT_FIVE_HOUR': '',
-            'USAGE_MONITOR_UTILIZATION_SEVEN_DAY': '45',
-            'USAGE_MONITOR_RESETS_AT_SEVEN_DAY': _future_iso(days=3),
+            'USAGE_MONITOR_UTILIZATION_PREMIUM_INTERACTIONS': '45',
+            'USAGE_MONITOR_RESETS_AT_PREMIUM_INTERACTIONS': '',
         }, capture_output=True)
 
     def _quick_action_menu_visible(self, item: Any = None) -> bool:
@@ -285,10 +257,8 @@ class UsageMonitorForCodex:
     def on_test_quick_action(self, icon: Any = None, item: Any = None) -> None:
         run_event_command(QUICK_ACTION_COMMAND, {
             'USAGE_MONITOR_EVENT': 'quick_action',
-            'USAGE_MONITOR_UTILIZATION_FIVE_HOUR': '30',
-            'USAGE_MONITOR_RESETS_AT_FIVE_HOUR': _future_iso(hours=3),
-            'USAGE_MONITOR_UTILIZATION_SEVEN_DAY': '55',
-            'USAGE_MONITOR_RESETS_AT_SEVEN_DAY': _future_iso(days=4),
+            'USAGE_MONITOR_UTILIZATION_PREMIUM_INTERACTIONS': '30',
+            'USAGE_MONITOR_RESETS_AT_PREMIUM_INTERACTIONS': '',
         }, capture_output=True)
 
     def on_quit(self, icon: Any = None, item: Any = None) -> None:
@@ -350,11 +320,18 @@ class UsageMonitorForCodex:
             self.icon.icon = create_status_image('C!' if data.get('auth_error') else '!', self._light_taskbar)
         else:
             top_field, top_mode = ICON_FIELDS[0].split(':', 1) if ':' in ICON_FIELDS[0] else (ICON_FIELDS[0], 'utilization')
-            bottom_field, bottom_mode = ICON_FIELDS[1].split(':', 1) if ':' in ICON_FIELDS[1] else (ICON_FIELDS[1], 'utilization')
+            # ICON_FIELDS defaults to a single field (there is no Copilot
+            # equivalent of Claude/Codex's five_hour/seven_day pair) - a
+            # second configured field draws a bottom bar, otherwise it
+            # stays empty rather than repeating the top field.
+            if len(ICON_FIELDS) > 1:
+                bottom_field, bottom_mode = ICON_FIELDS[1].split(':', 1) if ':' in ICON_FIELDS[1] else (ICON_FIELDS[1], 'utilization')
+            else:
+                bottom_field, bottom_mode = None, 'utilization'
             # isinstance instead of truthiness: a configured field may point at
             # a non-dict response value (e.g. the raw limits array).
             top_entry = data.get(top_field)
-            bottom_entry = data.get(bottom_field)
+            bottom_entry = data.get(bottom_field) if bottom_field else None
             if not isinstance(top_entry, dict):
                 top_entry = {}
             if not isinstance(bottom_entry, dict):
@@ -362,20 +339,13 @@ class UsageMonitorForCodex:
             pct_top = top_entry.get('utilization', 0) or 0
             pct_bottom = bottom_entry.get('utilization', 0) or 0
             top_period = field_period(top_field)
-            bottom_period = field_period(bottom_field)
+            bottom_period = field_period(bottom_field) if bottom_field else None
             time_pct_top = elapsed_pct(top_entry.get('resets_at', ''), top_period) if top_period else None
             time_pct_bottom = elapsed_pct(bottom_entry.get('resets_at', ''), bottom_period) if bottom_period else None
-            extra = data.get('extra_usage') or {}
-            extra_limit = extra.get('monthly_limit') or 0
-            extra_used = extra.get('used_credits') or 0
-            # A missing/null monthly_limit means uncapped pay-as-you-go extra
-            # usage, which cannot be exhausted.
-            extra_usage_available = bool(extra.get('is_enabled')) and (extra_limit <= 0 or extra_used < extra_limit)
             self.icon.icon = create_icon_image(
                 pct_top, pct_bottom, self._light_taskbar,
                 mode_top=top_mode, mode_bottom=bottom_mode,
                 time_pct_top=time_pct_top, time_pct_bottom=time_pct_bottom,
-                extra_usage_available=extra_usage_available,
             )
         self.icon.title = self._tooltip_prefix + format_tooltip(data)
 
@@ -410,7 +380,7 @@ class UsageMonitorForCodex:
         self._render_tray()
 
         # Handle CLI update notification from token refresh
-        if NOTIFY_CODEX_UPDATE and result.token_refresh and result.token_refresh.updated:
+        if NOTIFY_COPILOT_UPDATE and result.token_refresh and result.token_refresh.updated:
             self.icon.notify(
                 T['notify_update'].format(old=result.token_refresh.old_version, new=result.token_refresh.new_version),
                 T['notify_update_title'],
@@ -453,11 +423,9 @@ class UsageMonitorForCodex:
             return
         self._prev_account_uuid = current_account_uuid
 
-        # Collect all quota fields with utilization (extra_usage has a different structure)
+        # Collect all quota fields with utilization
         quota_fields: dict[str, float] = {}
         for key, value in result.data.items():
-            if key == 'extra_usage':
-                continue
             if isinstance(value, dict) and 'utilization' in value:
                 quota_fields[key] = value.get('utilization', 0) or 0
 
@@ -465,21 +433,18 @@ class UsageMonitorForCodex:
         # While idle/locked, defer notifications until the user returns (avoids lock screen privacy concerns).
         # The message carries no field information, so several quotas resetting
         # within one polling gap still produce a single notification.
+        # Unlike Claude/Codex, field names carry no period (five_hour vs.
+        # seven_day) to pick a per-field threshold from - one threshold
+        # applies to every field.
         reset_detected = False
         for key, pct in quota_fields.items():
             prev = self._prev_utilization.get(key)
             if prev is None:
                 continue
 
-            parsed = parse_field_name(key)
-            if parsed is None:
-                continue
-
-            _, unit, _ = parsed
-            reset_threshold = 95 if unit == 'hour' else 98
             any_blocking = any(other_pct >= 99 for other_key, other_pct in quota_fields.items() if other_key != key)
 
-            if prev > reset_threshold and pct < prev and not any_blocking:
+            if prev > RESET_DETECTION_THRESHOLD and pct < prev and not any_blocking:
                 reset_detected = True
 
         if reset_detected:
@@ -517,7 +482,7 @@ class UsageMonitorForCodex:
         Parameters
         ----------
         category : str
-            Deduplication key (e.g. ``'reset'``, ``'threshold_five_hour'``).
+            Deduplication key (e.g. ``'reset'``, ``'threshold_premium_interactions'``).
             While deferred, only the latest notification per category is
             kept so the user does not get a flood on return.
         message : str
@@ -554,8 +519,6 @@ class UsageMonitorForCodex:
         re-trigger in the next cycle.
         """
         for variant_key, entry in data.items():
-            if variant_key == 'extra_usage':
-                continue
             if not isinstance(entry, dict) or entry.get('utilization') is None:
                 continue
 
@@ -586,107 +549,21 @@ class UsageMonitorForCodex:
             elif highest_exceeded < last_notified:
                 self._notified_thresholds[variant_key] = highest_exceeded
 
-        self._check_extra_usage_alerts(data)
-
-    def _check_extra_usage_alerts(self, data: dict[str, Any]) -> None:
-        """Show a notification when extra usage crosses a configured threshold.
-
-        Extra usage has a different data format (``used_credits`` /
-        ``monthly_limit``) and no time-based reset, so it is handled
-        separately from the sliding-window quotas.
-        """
-        extra = data.get('extra_usage')
-        if not extra or not extra.get('is_enabled'):
-            return
-
-        used = extra.get('used_credits', 0) or 0
-        currency = extra.get('currency')
-        decimal_places = extra.get('decimal_places')
-        used_text = format_credits(used, currency, decimal_places)
-
-        limit = extra.get('monthly_limit', 0) or 0
-        if limit > 0:
-            pct = used / limit * 100
-            thresholds = get_alert_thresholds('extra_usage')
-            exceeded = [t for t in thresholds if pct >= t]
-            highest_exceeded = max(exceeded) if exceeded else 0
-            last_notified = self._notified_thresholds.get('extra_usage', 0)
-
-            if highest_exceeded > last_notified:
-                title = T['notify_threshold_title']
-                limit_text = format_credits(limit, currency, decimal_places)
-                message = T['notify_threshold_extra_usage'].format(
-                    pct=f'{pct:.0f}', used=used_text, limit=limit_text,
-                )
-                self._notify_or_defer('threshold_extra_usage', message, title)
-                self._run_threshold_command(
-                    'extra_usage', pct, highest_exceeded, extra, title, message,
-                    extra_used=used_text, extra_limit=limit_text,
-                )
-                self._notified_thresholds['extra_usage'] = highest_exceeded
-            elif highest_exceeded < last_notified:
-                self._notified_thresholds['extra_usage'] = highest_exceeded
-
-        self._check_extra_usage_spent_alerts(extra, used, used_text)
-
-    def _check_extra_usage_spent_alerts(self, extra: dict[str, Any], used: float, used_text: str) -> None:
-        """Show a notification when extra-usage spending crosses a configured amount.
-
-        Amounts in ``ALERT_EXTRA_USAGE_SPENT`` are absolute major-unit values
-        (e.g. dollars), so they also work for accounts whose extra usage has
-        no monthly limit and can never produce a percentage.
-        """
-        if not ALERT_EXTRA_USAGE_SPENT:
-            return
-
-        decimal_places = extra.get('decimal_places')
-        places = decimal_places if decimal_places is not None else 2
-        spent = used / (10 ** places)
-
-        exceeded = [amount for amount in ALERT_EXTRA_USAGE_SPENT if spent >= amount]
-        highest_exceeded = max(exceeded) if exceeded else 0
-        last_notified = self._notified_thresholds.get('extra_usage_spent', 0)
-
-        if highest_exceeded > last_notified:
-            title = T['notify_threshold_title']
-            message = T['notify_threshold_extra_usage_spent'].format(used=used_text)
-            self._notify_or_defer('threshold_extra_usage_spent', message, title)
-            self._run_threshold_command(
-                'extra_usage_spent', None, highest_exceeded, extra, title, message,
-                extra_used=used_text,
-            )
-            self._notified_thresholds['extra_usage_spent'] = highest_exceeded
-        elif highest_exceeded < last_notified:
-            self._notified_thresholds['extra_usage_spent'] = highest_exceeded
-
     # Event commands
 
     def _quota_snapshot_env(self, data: dict[str, Any]) -> dict[str, str]:
         """Build environment variables describing the current quota state.
 
         Emits one ``USAGE_MONITOR_UTILIZATION_<FIELD>`` /
-        ``USAGE_MONITOR_RESETS_AT_<FIELD>`` pair per detected quota field, plus
-        ``USAGE_MONITOR_EXTRA_USED`` when paid extra usage is enabled and
-        ``USAGE_MONITOR_EXTRA_LIMIT`` when it also has a monthly limit (an
-        uncapped account has no limit to report).  Shared by the startup and
-        double-click commands.
+        ``USAGE_MONITOR_RESETS_AT_<FIELD>`` pair per detected quota field.
+        Shared by the startup and double-click commands.
         """
         env_vars: dict[str, str] = {}
         for key, entry in data.items():
-            if key == 'extra_usage' or not isinstance(entry, dict) or 'utilization' not in entry:
+            if not isinstance(entry, dict) or 'utilization' not in entry:
                 continue
             env_vars[f'USAGE_MONITOR_UTILIZATION_{key.upper()}'] = str(round(entry.get('utilization', 0) or 0))
             env_vars[f'USAGE_MONITOR_RESETS_AT_{key.upper()}'] = entry.get('resets_at') or ''
-
-        extra = data.get('extra_usage') or {}
-        if extra.get('is_enabled'):
-            limit = extra.get('monthly_limit', 0) or 0
-            used = extra.get('used_credits', 0) or 0
-            currency = extra.get('currency')
-            decimal_places = extra.get('decimal_places')
-            env_vars['USAGE_MONITOR_EXTRA_USED'] = format_credits(used, currency, decimal_places)
-            if limit > 0:
-                env_vars['USAGE_MONITOR_EXTRA_LIMIT'] = format_credits(limit, currency, decimal_places)
 
         return env_vars
 
@@ -695,7 +572,7 @@ class UsageMonitorForCodex:
 
         Fires once after the first successful API update.  Receives the
         full quota state so the command can decide what to do (e.g. only
-        ping Codex when no five-hour session is active).
+        act when a particular quota field still has headroom).
         """
         if not ON_STARTUP_COMMAND:
             return
@@ -726,28 +603,29 @@ class UsageMonitorForCodex:
     def _run_reset_command(
         self, variant: str, pct: float, prev_pct: float, *, data: dict[str, Any], entry: dict[str, Any],
     ) -> None:
-        """Run the user-configured reset command if set."""
+        """Run the user-configured reset command if set.
+
+        Unlike Claude/Codex, quota fields are not a fixed pair (five_hour,
+        seven_day) - GitHub can add fields at any time - so the full state
+        is reported the same way the startup and quick-action commands do,
+        through ``_quota_snapshot_env``, rather than naming specific fields.
+        """
         if not ON_RESET_COMMAND:
             return
 
-        pct_5h = (data.get('five_hour') or {}).get('utilization', 0) or 0
-        pct_7d = (data.get('seven_day') or {}).get('utilization', 0) or 0
         run_event_command(ON_RESET_COMMAND, {
             'USAGE_MONITOR_EVENT': 'reset',
             'USAGE_MONITOR_VARIANT': variant,
             'USAGE_MONITOR_UTILIZATION': str(round(pct)),
             'USAGE_MONITOR_PREV_UTILIZATION': str(round(prev_pct)),
-            'USAGE_MONITOR_UTILIZATION_FIVE_HOUR': str(round(pct_5h)),
-            'USAGE_MONITOR_UTILIZATION_SEVEN_DAY': str(round(pct_7d)),
+            **self._quota_snapshot_env(data),
             'USAGE_MONITOR_RESETS_AT': entry.get('resets_at') or '',
             'USAGE_MONITOR_TITLE': T['notify_reset_title'],
             'USAGE_MONITOR_MESSAGE': T['notify_reset'],
         })
 
     def _run_threshold_command(
-        self, variant: str, pct: float | None, threshold: float,
-        entry: dict[str, Any], title: str, message: str,
-        *, extra_used: str = '', extra_limit: str = '',
+        self, variant: str, pct: float, threshold: float, entry: dict[str, Any], title: str, message: str,
     ) -> None:
         """Run the user-configured threshold command if set.
 
@@ -755,32 +633,19 @@ class UsageMonitorForCodex:
         so that already-exceeded thresholds at app startup do not trigger
         commands.  Notifications still fire - commands react to *events*,
         not *state*.
-
-        ``pct`` is None for spend-amount alerts, which have no utilization
-        percentage; ``USAGE_MONITOR_UTILIZATION`` is omitted from the
-        environment in that case.
         """
         if not ON_THRESHOLD_COMMAND or not self._first_update_done:
             return
 
-        env_vars = {
+        run_event_command(ON_THRESHOLD_COMMAND, {
             'USAGE_MONITOR_EVENT': 'threshold',
             'USAGE_MONITOR_VARIANT': variant,
-        }
-        if pct is not None:
-            env_vars['USAGE_MONITOR_UTILIZATION'] = str(round(pct))
-        env_vars.update({
+            'USAGE_MONITOR_UTILIZATION': str(round(pct)),
             'USAGE_MONITOR_THRESHOLD': str(round(threshold)),
             'USAGE_MONITOR_RESETS_AT': entry.get('resets_at') or '',
             'USAGE_MONITOR_TITLE': title,
             'USAGE_MONITOR_MESSAGE': message,
         })
-        if extra_used:
-            env_vars['USAGE_MONITOR_EXTRA_USED'] = extra_used
-        if extra_limit:
-            env_vars['USAGE_MONITOR_EXTRA_LIMIT'] = extra_limit
-
-        run_event_command(ON_THRESHOLD_COMMAND, env_vars)
 
     # Polling
 
@@ -1047,4 +912,4 @@ class UsageMonitorForCodex:
 
 def crash_log(msg: str) -> None:
     """Show a crash message box (for windowless EXE builds)."""
-    show_error_box(msg, 'Usage Monitor for Codex - Error')
+    show_error_box(msg, 'Usage Monitor for Copilot - Error')
