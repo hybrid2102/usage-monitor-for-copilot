@@ -16,7 +16,7 @@ from .settings import CURRENCY_SYMBOL, TIME_FORMAT, TOOLTIP_FIELDS, _SYSTEM_CURR
 
 __all__ = [
     'divider_positions', 'elapsed_pct', 'expand_popup_fields', 'field_period', 'format_credits',
-    'format_tooltip', 'popup_label', 'time_until', 'tooltip_label',
+    'format_tooltip', 'monthly_period_seconds', 'popup_label', 'time_until', 'tooltip_label',
 ]
 
 PERIOD_5H = 5 * 3600
@@ -77,22 +77,44 @@ def popup_label(field: str) -> str:
     return T['quota_label'].format(name=_humanize_field(field))
 
 
-def field_period(field: str) -> int | None:
-    """Return the period duration in seconds for a field, or None.
+def monthly_period_seconds(resets_at: str) -> int | None:
+    """Return the local calendar-month duration ending at ``resets_at``.
+
+    Calendar boundaries are used instead of 30 days so February and daylight
+    saving changes position the pace marker correctly.
+    """
+    if not resets_at:
+        return None
+    try:
+        end_local = datetime.fromisoformat(resets_at).astimezone()
+        year, month = end_local.year, end_local.month
+        if month == 1:
+            year, month = year - 1, 12
+        else:
+            month -= 1
+        start_local = datetime(year, month, 1).astimezone()
+        seconds = int((end_local - start_local).total_seconds())
+        return seconds if seconds > 0 else None
+    except Exception:
+        return None
+
+
+def field_period(field: str, resets_at: str = '') -> int | None:
+    """Return the monthly period duration for a Copilot quota field.
 
     Unlike Claude/Codex's ``five_hour``/``seven_day`` convention, Copilot's
-    field names (the raw ``quotaSnapshots`` keys) never encode a period -
-    GitHub's quotas reset monthly and the API gives no parseable duration -
-    so this always returns None.  Kept as a function, rather than removed
-    outright, because callers (app.py, popup.py) invoke it generically to
-    decide whether a time-elapsed marker can be drawn on a field's usage bar.
+    field names do not encode a period.  Known Copilot quotas reset monthly,
+    so the duration is inferred from the synthesized ``resets_at`` boundary.
 
     Parameters
     ----------
     field : str
         API field name, e.g. ``'premium_interactions'``.
+    resets_at : str
+        ISO timestamp for the next local calendar-month boundary.
     """
-    return None
+    del field  # Retain the shared caller contract.
+    return monthly_period_seconds(resets_at)
 
 
 def _field_sort_key(field: str) -> str:

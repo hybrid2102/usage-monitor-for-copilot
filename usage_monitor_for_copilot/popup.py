@@ -48,7 +48,12 @@ def _usage_entries(usage: dict[str, Any]) -> list[tuple[str, dict[str, Any] | No
     by field name when the pinned compact view is configured.
     """
     fields = expand_popup_fields(POPUP_FIELDS, usage)
-    return [(popup_label(key), usage.get(key), field_period(key), key) for key in fields]
+    entries = []
+    for key in fields:
+        entry = usage.get(key)
+        resets_at = entry.get('resets_at', '') if isinstance(entry, dict) else ''
+        entries.append((popup_label(key), entry, field_period(key, resets_at), key))
+    return entries
 
 
 def _prepaid_balance_text(prepaid: dict[str, Any] | None) -> str:

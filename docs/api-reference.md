@@ -104,7 +104,9 @@ A key is included in the monitor's normalized usage dict only when `hasQuota` is
 
 ### resetDate is not a reliable reset time
 
-Calling `account.getQuota` twice, 20 seconds apart, produced two `resetDate` values that were themselves about 20 seconds apart - on two separate accounts. The field tracks the wall-clock moment of the call, not any real monthly billing-cycle boundary. The monitor never surfaces `resetDate` as a countdown: every normalized quota field's `resets_at` is always the empty string `''`, regardless of what `resetDate` reports.
+Calling `account.getQuota` twice, 20 seconds apart, produced two `resetDate` values that were themselves about 20 seconds apart - on two separate accounts. The field tracks the wall-clock moment of the call, not any real monthly billing-cycle boundary, so the monitor never copies it into its UI.
+
+Copilot quotas are monthly. To make the pace indicator useful despite that limitation, every normalized quota field receives a synthesized `resets_at`: the next **local** calendar-month boundary (midnight on the first day of the next month). This drives the countdown and elapsed-time marker. It is an intentional monthly-cycle assumption, not a timestamp reported by GitHub; if an account has a different billing boundary, its marker is approximate.
 
 ### Overage fields are not yet surfaced
 

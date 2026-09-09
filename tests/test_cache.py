@@ -974,42 +974,32 @@ class TestNullQuotaFields(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# resets_at is always '' for Copilot
+# synthesized monthly resets_at for Copilot
 # ---------------------------------------------------------------------------
 
-class TestAlwaysEmptyResetsAt(unittest.TestCase):
+class TestMonthlyResetsAt(unittest.TestCase):
     """UsageCache itself never reads resets_at - it stores whatever fetch_usage()
-    returns without interpreting the quota dicts - so an all-empty resets_at
-    fixture (GitHub's real shape, per the field-naming contract in api.py) is
-    just more data to it and cannot make update() crash or misbehave.
-
-    The reset-aligned polling cadence that DOES depend on resets_at
-    (_align_to_reset, _safe_poll_target, the danger-window guard) lives in
-    app.py, not here - _seconds_until_next_reset() there already skips any
-    entry whose resets_at is falsy (see its ``not entry.get('resets_at')``
-    guard), so with every field empty it returns None and both
-    _align_to_reset(interval, None) and _safe_poll_target() fall back to the
-    plain, un-aligned interval unchanged.  This class covers the guarantee
-    cache.py itself can make; app.py's own tests cover the alignment fallback.
+    returns without interpreting the quota dicts.  The API synthesizes a next
+    calendar-month boundary and the cache must preserve it verbatim; app.py
+    owns the reset-aligned polling decisions based on that timestamp.
     """
 
     @patch('usage_monitor_for_copilot.cache.fetch_usage', return_value={
-        'chat': {'utilization': 12.0, 'resets_at': ''},
-        'completions': {'utilization': 0.0, 'resets_at': ''},
-        'premium_interactions': {'utilization': 87.5, 'resets_at': '', 'unlimited': False},
+        'chat': {'utilization': 12.0, 'resets_at': '2026-10-01T00:00:00Z'},
+        'completions': {'utilization': 0.0, 'resets_at': '2026-10-01T00:00:00Z'},
+        'premium_interactions': {'utilization': 87.5, 'resets_at': '2026-10-01T00:00:00Z', 'unlimited': False},
     })
-    def test_all_empty_resets_at_does_not_crash(self, _mock_fetch):
-        """update() succeeds and stores the data verbatim when every quota
-        field's resets_at is '' - the normal shape of a Copilot response."""
+    def test_monthly_resets_at_is_stored_verbatim(self, _mock_fetch):
+        """update() succeeds and preserves every quota's monthly boundary."""
         cache = _make_cache()
 
         result = cache.update()
 
         self.assertIsNotNone(result.data)
         self.assertIsNone(cache.last_error)
-        self.assertEqual(cache.usage['chat']['resets_at'], '')
-        self.assertEqual(cache.usage['completions']['resets_at'], '')
-        self.assertEqual(cache.usage['premium_interactions']['resets_at'], '')
+        self.assertEqual(cache.usage['chat']['resets_at'], '2026-10-01T00:00:00Z')
+        self.assertEqual(cache.usage['completions']['resets_at'], '2026-10-01T00:00:00Z')
+        self.assertEqual(cache.usage['premium_interactions']['resets_at'], '2026-10-01T00:00:00Z')
 
 
 # ---------------------------------------------------------------------------

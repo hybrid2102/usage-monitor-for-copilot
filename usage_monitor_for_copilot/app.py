@@ -338,8 +338,8 @@ class UsageMonitorForCopilot:
                 bottom_entry = {}
             pct_top = top_entry.get('utilization', 0) or 0
             pct_bottom = bottom_entry.get('utilization', 0) or 0
-            top_period = field_period(top_field)
-            bottom_period = field_period(bottom_field) if bottom_field else None
+            top_period = field_period(top_field, top_entry.get('resets_at', ''))
+            bottom_period = field_period(bottom_field, bottom_entry.get('resets_at', '')) if bottom_field else None
             time_pct_top = elapsed_pct(top_entry.get('resets_at', ''), top_period) if top_period else None
             time_pct_bottom = elapsed_pct(bottom_entry.get('resets_at', ''), bottom_period) if bottom_period else None
             self.icon.icon = create_icon_image(
@@ -532,7 +532,7 @@ class UsageMonitorForCopilot:
             last_notified = self._notified_thresholds.get(variant_key, 0)
 
             if ALERT_TIME_AWARE and highest_exceeded > last_notified and highest_exceeded < ALERT_TIME_AWARE_BELOW:
-                period = field_period(variant_key)
+                period = field_period(variant_key, entry.get('resets_at', ''))
                 if period:
                     time_pct = elapsed_pct(entry.get('resets_at'), period)
                     if time_pct is not None and pct <= time_pct:

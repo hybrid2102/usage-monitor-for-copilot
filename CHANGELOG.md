@@ -4,6 +4,17 @@ All notable changes to Usage Monitor for Copilot are documented here. The projec
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-09
+
+### Added
+
+- Monthly pace markers and countdowns for all Copilot quota bars, based on the elapsed portion of the local calendar month.
+- Time-aware warning colors when quota consumption is ahead of the monthly pace, plus the synthesized reset timestamp in event-command variables.
+
+### Changed
+
+- The monitor continues to ignore Copilot CLI `resetDate` values because they reflect the request time; it now derives the next local month boundary instead.
+
 ## [0.1.0] - 2026-09-07
 
 ### Added
@@ -25,5 +36,6 @@ All notable changes to Usage Monitor for Copilot are documented here. The projec
 
 This project derives from [Usage Monitor for Claude](https://github.com/jens-duttke/usage-monitor-for-claude). Its earlier history remains available in Git and its copyright notice remains in the MIT license.
 
-[Unreleased]: https://github.com/hybrid2102/usage-monitor-for-copilot/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/hybrid2102/usage-monitor-for-copilot/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/hybrid2102/usage-monitor-for-copilot/compare/v0.2.0...v0.3.0
 [0.1.0]: https://github.com/hybrid2102/usage-monitor-for-copilot/releases/tag/v0.1.0

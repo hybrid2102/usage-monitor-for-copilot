@@ -61,17 +61,17 @@ class TestUsageEntries(unittest.TestCase):
         labels = [e[0] for e in entries]
         self.assertEqual(labels, [popup_label('chat'), popup_label('completions')])
 
-    def test_periods_are_always_none(self):
-        """Unlike Claude/Codex's five_hour/seven_day naming, Copilot field
-        names carry no period - field_period never parses one out, so every
-        entry's period is None regardless of the field's resets_at."""
+    def test_periods_are_inferred_from_monthly_reset_boundaries(self):
+        """Copilot quota fields share a local calendar-month pace marker."""
+        from datetime import datetime, timezone
+
         usage = {
-            'chat': {'utilization': 42, 'resets_at': '2026-01-01T00:00:00Z'},
-            'completions': {'utilization': 10, 'resets_at': '2026-01-07T00:00:00Z'},
+            'chat': {'utilization': 42, 'resets_at': datetime(2026, 2, 1).astimezone(timezone.utc).isoformat()},
+            'completions': {'utilization': 10, 'resets_at': datetime(2026, 3, 1).astimezone(timezone.utc).isoformat()},
         }
         entries = _usage_entries(usage)
         periods = [e[2] for e in entries]
-        self.assertEqual(periods, [None, None])
+        self.assertEqual(periods, [31 * 24 * 3600, 28 * 24 * 3600])
 
     def test_data_extraction(self):
         """Entry data is pulled from the correct usage dict keys."""

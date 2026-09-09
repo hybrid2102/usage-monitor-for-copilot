@@ -143,7 +143,7 @@ Must be an array of non-empty strings. Unknown field names are accepted - if a f
 
 **Common field names:** `chat`, `completions`, `premium_interactions`, plus any additional quota key GitHub adds to the API later.
 
-Unlike the Claude and Codex monitors, Copilot's quota fields carry no reset timestamp the app can trust (see [API Reference](api-reference.md#resetdate-is-not-a-reliable-reset-time)), so the icon bars show no elapsed-time marker and never switch to the warning color for being "ahead of pace" - only an exhausted quota (100%) is called out.
+The CLI's `resetDate` is not trustworthy, so the monitor does not use it. Instead it treats Copilot quotas as monthly and places the marker at the percentage of the **local calendar month** that has elapsed. A bar turns to the warning color when usage is ahead of that pace (and at 100%). If GitHub applies a different billing boundary to an account, this indicator is approximate; see [API Reference](api-reference.md#resetdate-is-not-a-reliable-reset-time).
 
 **Example** - show premium interactions and chat as two stacked percentages:
 
@@ -215,4 +215,4 @@ Override individual channels as RGBA arrays `[R, G, B, A]` (0-255). Unspecified 
 | `bar_divider` | `"#000c"` | Time dividers on progress bars |
 | `bar_marker` | `"#fffc"` | Time-position marker on progress bars |
 
-`bar_divider` and `bar_marker` have no visible effect in this version: both need a real period boundary to place their marks against, and every Copilot quota field's reset timestamp is always empty (see [Tray icon bars](#tray-icon-bars) above). The settings are still accepted so a shared settings file with the Claude or Codex monitor does not error out.
+`bar_marker` colors the local-month time-position marker. `bar_divider` colors the daily dividers in popup bars. Both use the synthesized monthly boundary described in [Tray icon bars](#tray-icon-bars), not the unreliable `resetDate` returned by the CLI.

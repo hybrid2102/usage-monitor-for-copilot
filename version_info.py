@@ -2,8 +2,8 @@
 
 VSVersionInfo(
     ffi=FixedFileInfo(
-        filevers=(0, 1, 0, 0),
-        prodvers=(0, 1, 0, 0),
+        filevers=(0, 3, 0, 0),
+        prodvers=(0, 3, 0, 0),
         mask=0x3F,
         flags=0x0,
         OS=0x40004,          # VOS_NT_WINDOWS32
@@ -17,11 +17,11 @@ VSVersionInfo(
                 [
                     StringStruct('CompanyName', 'hybrid2102'),
                     StringStruct('FileDescription', 'Usage Monitor for Copilot'),
-                    StringStruct('FileVersion', '0.1.0.0'),
+                    StringStruct('FileVersion', '0.3.0.0'),
                     StringStruct('InternalName', 'UsageMonitorForCopilot'),
                     StringStruct('OriginalFilename', 'UsageMonitorForCopilot.exe'),
                     StringStruct('ProductName', 'Usage Monitor for Copilot'),
-                    StringStruct('ProductVersion', '0.1.0.0'),
+                    StringStruct('ProductVersion', '0.3.0.0'),
                 ],
             ),
         ]),

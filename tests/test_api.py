@@ -4,6 +4,7 @@ from __future__ import annotations
 import io
 import json
 import unittest
+from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
 from usage_monitor_for_copilot.api import (
@@ -14,6 +15,7 @@ from usage_monitor_for_copilot.api import (
     fetch_profile,
     fetch_usage,
     is_authenticated,
+    monthly_reset_at,
     normalize_quota_snapshots,
     read_frame,
 )
@@ -176,6 +178,8 @@ class TestConnectHandshake(unittest.TestCase):
 
 
 class TestNormalizeQuotaSnapshots(unittest.TestCase):
+    NOW = datetime(2026, 1, 14, 12, tzinfo=timezone.utc)
+
     def test_personal_account_fields_are_at_zero_utilization(self):
         result = normalize_quota_snapshots(_personal_account_snapshot())
         self.assertEqual(result['chat']['utilization'], 0.0)
@@ -190,18 +194,26 @@ class TestNormalizeQuotaSnapshots(unittest.TestCase):
         self.assertAlmostEqual(result['premium_interactions']['utilization'], 30.4, places=1)
 
     def test_unlimited_fields_get_unlimited_true_and_zero_utilization(self):
-        result = normalize_quota_snapshots(_business_account_snapshot())
-        self.assertEqual(result['chat'], {'utilization': 0.0, 'resets_at': '', 'unlimited': True})
-        self.assertEqual(result['completions'], {'utilization': 0.0, 'resets_at': '', 'unlimited': True})
+        result = normalize_quota_snapshots(_business_account_snapshot(), now=self.NOW)
+        self.assertEqual(result['chat']['utilization'], 0.0)
+        self.assertTrue(result['chat']['unlimited'])
+        self.assertEqual(result['completions']['utilization'], 0.0)
+        self.assertTrue(result['completions']['unlimited'])
 
     def test_metered_field_has_no_unlimited_key(self):
         result = normalize_quota_snapshots(_business_account_snapshot())
         self.assertNotIn('unlimited', result['premium_interactions'])
 
-    def test_resets_at_is_always_empty_never_the_raw_reset_date(self):
+    def test_resets_at_is_next_month_not_the_raw_reset_date(self):
+        expected = monthly_reset_at(self.NOW)
         for snapshot in (_personal_account_snapshot(), _business_account_snapshot()):
-            for field in normalize_quota_snapshots(snapshot).values():
-                self.assertEqual(field['resets_at'], '')
+            for field in normalize_quota_snapshots(snapshot, now=self.NOW).values():
+                self.assertEqual(field['resets_at'], expected)
+                self.assertNotIn(field['resets_at'], {'2024-01-01T00:00:00Z', '2024-02-02T00:00:20Z'})
+
+    def test_monthly_reset_is_local_midnight_on_the_first(self):
+        reset = datetime.fromisoformat(monthly_reset_at(self.NOW)).astimezone()
+        self.assertEqual((reset.year, reset.month, reset.day, reset.hour, reset.minute), (2026, 2, 1, 0, 0))
 
     def test_non_mapping_payload_is_empty(self):
         self.assertEqual(normalize_quota_snapshots(None), {})

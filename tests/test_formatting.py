@@ -15,7 +15,7 @@ from unittest.mock import MagicMock, patch
 from usage_monitor_for_copilot.formatting import (
     PERIOD_5H, PERIOD_7D,
     divider_positions, elapsed_pct, expand_popup_fields, field_period, format_credits,
-    format_tooltip, popup_label, time_until, tooltip_label,
+    format_tooltip, monthly_period_seconds, popup_label, time_until, tooltip_label,
 )
 from usage_monitor_for_copilot.i18n import LOCALE_DIR
 
@@ -104,8 +104,8 @@ class TestFieldPeriod(unittest.TestCase):
     """Tests for field_period().
 
     Unlike Claude/Codex's five_hour/seven_day naming, Copilot field names
-    never encode a period, so this always returns None - app.py and popup.py
-    rely on that to skip the elapsed-time marker on a usage bar.
+    never encode a period.  A monthly reset boundary supplies the duration
+    needed for the elapsed-time marker.
     """
 
     def test_premium_interactions(self):
@@ -119,6 +119,12 @@ class TestFieldPeriod(unittest.TestCase):
 
     def test_empty_string(self):
         self.assertIsNone(field_period(''))
+
+    def test_month_boundary_uses_the_actual_month_length(self):
+        february = datetime(2026, 2, 1).astimezone(timezone.utc).isoformat()
+        march = datetime(2026, 3, 1).astimezone(timezone.utc).isoformat()
+        self.assertEqual(field_period('chat', february), 31 * 24 * 3600)
+        self.assertEqual(monthly_period_seconds(march), 28 * 24 * 3600)
 
 
 # ---------------------------------------------------------------------------
@@ -697,10 +703,8 @@ class TestFormatTooltip(unittest.TestCase):
         self.assertEqual(format_tooltip(data), 'Copilot Usage\nPremium Interactions: 42%')
 
     @patch('usage_monitor_for_copilot.formatting.time_until', return_value='')
-    def test_resets_at_always_empty_shows_no_reset_clause(self, _mock_tu):
-        """Copilot's resets_at is always '' (see the field-naming contract in
-        cache.py) - the tooltip line never grows a reset clause, unlike
-        Claude/Codex where a real resets_at appends '(Resets in ...)'."""
+    def test_empty_resets_at_shows_no_reset_clause(self, _mock_tu):
+        """A missing reset timestamp does not add a tooltip clause."""
         data = {'premium_interactions': {'utilization': 26.0, 'resets_at': ''}}
         self.assertEqual(format_tooltip(data), 'Copilot Usage\nPremium Interactions: 26%')
 

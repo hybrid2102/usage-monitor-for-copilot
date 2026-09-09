@@ -2020,8 +2020,7 @@ class TestTestEventCommands(unittest.TestCase):
         self.assertEqual(env['USAGE_MONITOR_UTILIZATION'], '0')
         self.assertEqual(env['USAGE_MONITOR_PREV_UTILIZATION'], '95')
         self.assertEqual(env['USAGE_MONITOR_UTILIZATION_PREMIUM_INTERACTIONS'], '0')
-        # resets_at is always '' for Copilot (no parseable period), unlike
-        # Claude/Codex's five_hour/seven_day tests fed a future timestamp here.
+        # Test-menu sample data intentionally omits the derived monthly boundary.
         self.assertEqual(env['USAGE_MONITOR_RESETS_AT'], '')
         self.assertIn('USAGE_MONITOR_TITLE', env)
         self.assertIn('USAGE_MONITOR_MESSAGE', env)
@@ -2923,8 +2922,7 @@ class TestStartupCommand(unittest.TestCase):
         self.assertEqual(cmd, ['echo startup'])
         self.assertEqual(env['USAGE_MONITOR_EVENT'], 'startup')
         self.assertEqual(env['USAGE_MONITOR_UTILIZATION_PREMIUM_INTERACTIONS'], '45')
-        # resets_at is always '' for Copilot - unlike the Claude/Codex twin,
-        # there is no second field here with a future timestamp to contrast it against.
+        # Test-menu sample data intentionally omits the derived monthly boundary.
         self.assertEqual(env['USAGE_MONITOR_RESETS_AT_PREMIUM_INTERACTIONS'], '')
 
 
@@ -3033,8 +3031,7 @@ class TestDoubleClickCommand(unittest.TestCase):
         self.assertEqual(cmd, ['run.exe'])
         self.assertEqual(env['USAGE_MONITOR_EVENT'], 'quick_action')
         self.assertEqual(env['USAGE_MONITOR_UTILIZATION_PREMIUM_INTERACTIONS'], '30')
-        # resets_at is always '' for Copilot, unlike the future timestamp the
-        # Claude/Codex twin's test fed for its second (seven_day) field.
+        # Test-menu sample data intentionally omits the derived monthly boundary.
         self.assertEqual(env['USAGE_MONITOR_RESETS_AT_PREMIUM_INTERACTIONS'], '')
 
 

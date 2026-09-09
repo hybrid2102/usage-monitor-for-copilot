@@ -20,7 +20,7 @@ The Copilot CLI subprocess communicates with GitHub according to its own authent
 
 ## Data held in memory
 
-While running, the application may hold per-category quota utilization, unlimited-entitlement flags, and other usage metadata returned by the Copilot CLI. This data is used only to render the tray icon, popup, and optional local notifications. It is not persisted by the monitor. The CLI's own quota reset timestamp is read but never surfaced as a countdown, because it was found to track the moment of the request rather than a real billing-cycle boundary.
+While running, the application may hold per-category quota utilization, unlimited-entitlement flags, and other usage metadata returned by the Copilot CLI. This data is used only to render the tray icon, popup, and optional local notifications. It is not persisted by the monitor. The CLI's own reset timestamp is ignored because it tracks the moment of the request rather than a real billing-cycle boundary; the monitor derives a local calendar-month boundary for its pace marker and countdown.
 
 ## Local settings and operating-system integration
 

@@ -58,7 +58,7 @@ See [configuration](docs/configuration.md), [event commands](docs/event-commands
 
 - Windows is the primary tested platform; Linux support is experimental.
 - The Copilot CLI's `--server` mode is not publicly documented, so its protocol may change between CLI releases.
-- No reset countdown is shown for Copilot quotas: the CLI's own reset timestamp was found to track the moment of the request rather than a real billing-cycle boundary, so it cannot be trusted until GitHub's API reports a reliable one.
+- Copilot's `resetDate` is not used because it tracks the request time. The monitor instead uses the next local calendar-month boundary for its monthly countdown and pace marker; if GitHub uses a different billing boundary for an account, that indicator will be approximate.
 - The executable is not code-signed.
 
 ## Attribution

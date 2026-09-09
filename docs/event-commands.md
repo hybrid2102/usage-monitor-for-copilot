@@ -37,7 +37,7 @@ Every event receives contextual environment variables:
 | `USAGE_MONITOR_THRESHOLD` | Crossed threshold, when applicable |
 | `USAGE_MONITOR_RESETS_AT` | ISO reset timestamp, when available |
 
-`USAGE_MONITOR_RESETS_AT` is always empty for this monitor: the Copilot CLI's `resetDate` does not track a real billing-cycle boundary, so it is never surfaced as a reset time (see [API Reference](api-reference.md#resetdate-is-not-a-reliable-reset-time)). A reset is still detected - and `on_reset_command` still fires - from usage dropping, just without a timestamp to pass along.
+`USAGE_MONITOR_RESETS_AT` is the synthesized ISO timestamp for the next local calendar-month boundary. The Copilot CLI's own `resetDate` is never passed through because it tracks the request time rather than a billing-cycle boundary (see [API Reference](api-reference.md#resetdate-is-not-a-reliable-reset-time)). A reset is still detected from usage dropping.
 
 The application may expose additional backward-compatible variables. Treat all values as untrusted input when passing them into another shell or script.
 

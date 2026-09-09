@@ -27,6 +27,7 @@ import socket
 import subprocess
 import threading
 import time
+from datetime import datetime, timezone
 from typing import Any, BinaryIO
 
 from .copilot_cli import COPILOT_CLI_PATH
@@ -36,7 +37,7 @@ from .platforms import no_window_kwargs
 __all__ = [
     'CopilotServerClient', 'CopilotServerError', 'api_headers', 'close_client', 'encode_frame',
     'fetch_prepaid_credits', 'fetch_profile', 'fetch_usage', 'is_authenticated',
-    'normalize_quota_snapshots', 'read_access_token', 'read_frame',
+    'monthly_reset_at', 'normalize_quota_snapshots', 'read_access_token', 'read_frame',
 ]
 
 _PORT_PATTERN = re.compile(r'listening on port (\d+)')
@@ -404,7 +405,24 @@ def fetch_prepaid_credits(_org_uuid: Any) -> None:
     return None
 
 
-def normalize_quota_snapshots(payload: Any) -> dict[str, Any]:
+def monthly_reset_at(now: datetime | None = None) -> str:
+    """Return the next local calendar-month boundary as an ISO UTC timestamp.
+
+    Copilot's ``resetDate`` reflects the request time rather than the quota
+    boundary.  The quota cycle is monthly, so this supplies a stable boundary
+    for pace indicators.  ``now`` keeps calendar edge cases testable.
+    """
+    local_now = (now or datetime.now().astimezone()).astimezone()
+    year, month = local_now.year, local_now.month
+    if month == 12:
+        year, month = year + 1, 1
+    else:
+        month += 1
+    reset_local = datetime(year, month, 1).astimezone()
+    return reset_local.astimezone(timezone.utc).isoformat().replace('+00:00', 'Z')
+
+
+def normalize_quota_snapshots(payload: Any, *, now: datetime | None = None) -> dict[str, Any]:
     """Convert an ``account.getQuota`` result to the monitor's quota format.
 
     Parameters
@@ -419,14 +437,12 @@ def normalize_quota_snapshots(payload: Any) -> dict[str, Any]:
         ``quotaSnapshots`` key verbatim (e.g. ``'chat'``, ``'completions'``,
         ``'premium_interactions'``) - no renaming table, so a key GitHub adds
         later flows through automatically. Each entry is
-        ``{'utilization': float, 'resets_at': ''}``, plus ``'unlimited': True``
+        ``{'utilization': float, 'resets_at': '<next month>'}``, plus
+        ``'unlimited': True``
         when the plan grants unlimited entitlement for that key.
 
-        ``resets_at`` is always ``''``: a live spike calling ``account.getQuota``
-        twice, 20 seconds apart, returned two ``resetDate`` values themselves
-        about 20 seconds apart, on two different accounts - the field tracks
-        the call's wall-clock moment, not a real billing-cycle boundary, and
-        must never be surfaced as a reset countdown.
+        ``resets_at`` is derived from the next local calendar-month boundary,
+        rather than copied from the CLI's unreliable ``resetDate`` field.
     """
     if not isinstance(payload, dict):
         return {}
@@ -434,6 +450,7 @@ def normalize_quota_snapshots(payload: Any) -> dict[str, Any]:
     if not isinstance(snapshots, dict):
         return {}
 
+    reset_at = monthly_reset_at(now)
     normalized: dict[str, Any] = {}
     for field, snapshot in snapshots.items():
         if not isinstance(snapshot, dict) or not snapshot.get('hasQuota'):
@@ -453,7 +470,7 @@ def normalize_quota_snapshots(payload: Any) -> dict[str, Any]:
         # Claude/Codex twins use. Collapsing several of these onto one slot is a
         # product decision, not a mechanical port, so they are left unread for now.
 
-        entry: dict[str, Any] = {'utilization': utilization, 'resets_at': ''}
+        entry: dict[str, Any] = {'utilization': utilization, 'resets_at': reset_at}
         if unlimited:
             entry['unlimited'] = True
         normalized[str(field)] = entry
