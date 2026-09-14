@@ -10,4 +10,4 @@ the Copilot CLI's ``--server`` mode. The monitor never reads credential files.
 """
 from __future__ import annotations
 
-__version__ = '0.1.0'
+__version__ = '0.3.1'

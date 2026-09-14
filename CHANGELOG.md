@@ -4,6 +4,13 @@ All notable changes to Usage Monitor for Copilot are documented here. The projec
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-09-14
+
+### Fixed
+
+- A `copilot --server` subprocess that goes unresponsive without exiting could block the polling thread forever with no visible error, freezing the displayed usage until the app was restarted. A watchdog now force-disconnects a stuck request after its timeout elapses, so the failure surfaces and the client reconnects on its own.
+- The app version shown in the popup footer had been stuck at `0.1.0` since the 0.2.0 release; it now reports the actual running version.
+
 ## [0.3.0] - 2026-09-09
 
 ### Added
@@ -36,6 +43,7 @@ All notable changes to Usage Monitor for Copilot are documented here. The projec
 
 This project derives from [Usage Monitor for Claude](https://github.com/jens-duttke/usage-monitor-for-claude). Its earlier history remains available in Git and its copyright notice remains in the MIT license.
 
-[Unreleased]: https://github.com/hybrid2102/usage-monitor-for-copilot/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/hybrid2102/usage-monitor-for-copilot/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/hybrid2102/usage-monitor-for-copilot/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/hybrid2102/usage-monitor-for-copilot/compare/v0.2.0...v0.3.0
 [0.1.0]: https://github.com/hybrid2102/usage-monitor-for-copilot/releases/tag/v0.1.0

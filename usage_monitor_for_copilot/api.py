@@ -116,6 +116,12 @@ def read_frame(stream: BinaryIO) -> dict[str, Any] | None:
 class CopilotServerClient:
     """Small, serialized JSON-RPC client for ``copilot --server``."""
 
+    # Extra time _force_disconnect waits beyond a request's own `timeout`
+    # before assuming a call with no timeout of its own (see
+    # _force_disconnect) is stuck rather than just slow. A class attribute
+    # so a test can shrink it instead of waiting out a realistic margin.
+    _WATCHDOG_GRACE = 10.0
+
     def __init__(self, cli_path: str | None = None) -> None:
         self.cli_path = cli_path or str(COPILOT_CLI_PATH)
         self._lock = threading.RLock()
@@ -130,6 +136,11 @@ class CopilotServerClient:
         last_error: CopilotServerError | None = None
         for attempt in range(2):
             with self._lock:
+                # Bounds the whole attempt (handshake plus this call), not just the
+                # response wait _request_locked already times - see _force_disconnect.
+                watchdog = threading.Timer(timeout + self._WATCHDOG_GRACE, self._force_disconnect)
+                watchdog.daemon = True
+                watchdog.start()
                 try:
                     self._ensure_started_locked(timeout=min(timeout, 10.0))
                     return self._request_locked(method, params if params is not None else {}, timeout=timeout)
@@ -143,7 +154,45 @@ class CopilotServerClient:
                     self._stop_locked()
                     if attempt:
                         raise
+                finally:
+                    watchdog.cancel()
         raise last_error or CopilotServerError('Copilot CLI server request failed')
+
+    def _force_disconnect(self) -> None:
+        """Last-resort unblock for an attempt stuck on a call with no timeout of its own.
+
+        Once connected, the socket's timeout is cleared (see
+        ``_ensure_started_locked``), so ``sendall()`` - and the raw socket reads
+        behind ``read_frame`` on the ``_read_socket`` thread - block with no
+        bound of their own; only the response wait in ``_request_locked`` times
+        out. If the ``copilot --server`` subprocess goes unresponsive without
+        exiting (a wedged event loop, stalled I/O), one of those calls can hang
+        forever. Nothing on that path would ever raise, so ``request()`` never
+        returns, the poll loop that called it freezes with it, and no error
+        ever reaches the cache or the popup - values stay stuck until the app
+        is restarted.
+
+        Runs on its own timer thread, without ``self._lock`` - the thread that
+        would normally hold it is presumably the one blocked inside it.
+        ``shutdown()`` rather than ``close()`` is used so a concurrent blocking
+        send/recv on this exact socket object observes it immediately as a
+        connection error, without invalidating the file descriptor for any
+        other thread the way closing it from here could. Once unblocked, the
+        caller's own exception handling (``request()``'s ``except
+        CopilotServerError``, or the ``_read_socket`` thread's ``finally``)
+        takes it from there, exactly as for any other transport failure.
+        """
+        sock = self._socket
+        if sock is None:
+            return
+        try:
+            sock.shutdown(socket.SHUT_RDWR)
+        except OSError:
+            pass
+        try:
+            sock.close()
+        except OSError:
+            pass
 
     def close(self) -> None:
         with self._lock:

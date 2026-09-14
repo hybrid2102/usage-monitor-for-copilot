@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import io
 import json
+import threading
+import time
 import unittest
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
@@ -175,6 +177,66 @@ class TestConnectHandshake(unittest.TestCase):
 
         self.assertEqual(raised.exception.code, -32001)
         self.assertIn('AUTHENTICATION_REQUIRED', str(raised.exception))
+
+
+class _HungAfterHandshakeSocket:
+    """Fake socket whose ``sendall`` hangs on any call after the handshake.
+
+    Simulates a ``copilot --server`` process that stays alive but stops
+    servicing its socket (a wedged event loop) - the case the socket has no
+    timeout of its own to catch, once connected (see
+    ``CopilotServerClient._force_disconnect``). ``sendall`` for the initial
+    ``connect`` call succeeds normally; any later call blocks until
+    ``shutdown()`` releases it, then fails the way a real shut-down socket
+    would - mirroring what a production hang looks like once
+    ``_force_disconnect`` intervenes, with a 5s cap so a regression makes
+    the test fail slowly rather than hang the suite.
+    """
+
+    def __init__(self, connect_response: bytes) -> None:
+        self._stream = io.BytesIO(connect_response)
+        self._shutdown_event = threading.Event()
+
+    def sendall(self, data: bytes) -> None:
+        if b'"connect"' in data:
+            return
+        if not self._shutdown_event.wait(5):
+            raise AssertionError('sendall was never unblocked by shutdown()')
+        raise OSError('Socket is not connected')
+
+    def shutdown(self, _how: int) -> None:
+        self._shutdown_event.set()
+
+    def close(self) -> None:
+        pass
+
+    def settimeout(self, _value: float | None) -> None:
+        pass
+
+    def makefile(self, _mode: str) -> io.BytesIO:
+        return self._stream
+
+
+class TestWatchdog(unittest.TestCase):
+    @patch('usage_monitor_for_copilot.api.socket.create_connection')
+    @patch('usage_monitor_for_copilot.api.subprocess.Popen')
+    def test_a_send_that_hangs_after_connecting_is_unblocked_and_reported(self, popen, create_connection):
+        popen.return_value = _started_process('CLI server listening on port 54321\n')
+        create_connection.return_value = _HungAfterHandshakeSocket(
+            encode_frame({'id': 1, 'result': {'ok': True}}),
+        )
+
+        client = CopilotServerClient('copilot')
+        client._WATCHDOG_GRACE = 0.05  # keep the test fast instead of waiting out the production margin
+
+        start = time.monotonic()
+        with self.assertRaises(CopilotServerError):
+            client.request('account.getQuota', {}, timeout=0.1)
+        elapsed = time.monotonic() - start
+
+        # Without the watchdog this would hang until the fake's 5s safety cap
+        # (or forever, against a real socket) instead of surfacing an error.
+        self.assertLess(elapsed, 2.0)
 
 
 class TestNormalizeQuotaSnapshots(unittest.TestCase):
