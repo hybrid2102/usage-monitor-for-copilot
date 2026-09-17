@@ -239,6 +239,19 @@ class TestWatchdog(unittest.TestCase):
         self.assertLess(elapsed, 2.0)
 
 
+class TestReadSocketThread(unittest.TestCase):
+    def test_a_connection_reset_ends_the_stream_quietly(self):
+        stream = MagicMock()
+        stream.readline.side_effect = ConnectionResetError(10054, 'reset by peer')
+        sock = MagicMock()
+        sock.makefile.return_value = stream
+        client = CopilotServerClient('copilot')
+
+        client._read_socket(sock)  # must not raise out of the thread body
+
+        self.assertIsNone(client._messages.get(timeout=1))
+
+
 class TestNormalizeQuotaSnapshots(unittest.TestCase):
     NOW = datetime(2026, 1, 14, 12, tzinfo=timezone.utc)
 
@@ -315,6 +328,25 @@ class TestFetchUsage(unittest.TestCase):
     def test_empty_quota_snapshots_is_reported_as_an_error(self, client):
         client.request.return_value = {'quotaSnapshots': {}}
         self.assertIn('error', fetch_usage())
+
+    @patch('usage_monitor_for_copilot.api._CLIENT')
+    def test_stops_the_server_after_a_successful_fetch(self, client):
+        # A long-lived `copilot --server` answers account.getQuota from a snapshot
+        # taken at startup and never refreshed, so usage made elsewhere would
+        # stay invisible until the app restarted. Every poll must start fresh.
+        client.request.return_value = _business_account_snapshot()
+
+        fetch_usage()
+
+        client.close.assert_called_once_with()
+
+    @patch('usage_monitor_for_copilot.api._CLIENT')
+    def test_stops_the_server_after_a_failed_fetch_too(self, client):
+        client.request.side_effect = CopilotServerError('boom')
+
+        fetch_usage()
+
+        client.close.assert_called_once_with()
 
     @patch('usage_monitor_for_copilot.api._CLIENT')
     def test_transport_failure_is_an_error_without_the_auth_flag(self, client):

@@ -341,6 +341,11 @@ class CopilotServerClient:
                 if message is None:
                     break
                 self._messages.put(message)
+        except OSError:
+            # The peer reset the connection or the socket was closed under us
+            # (``_stop_locked`` / ``_force_disconnect``): an ordinary end of
+            # stream for this thread, not something worth a traceback on stderr.
+            pass
         finally:
             self._messages.put(None)
 
@@ -427,7 +432,20 @@ def fetch_profile() -> dict[str, Any] | None:
 
 
 def fetch_usage() -> dict[str, Any]:
-    """Fetch Copilot quota snapshots and normalize them for the UI."""
+    """Fetch Copilot quota snapshots and normalize them for the UI.
+
+    The ``copilot --server`` subprocess is stopped after every call, on
+    purpose. A long-lived server answers ``account.getQuota`` from a
+    snapshot it took once at startup and never refreshes: measured against
+    CLI 1.0.84, a server kept open for minutes kept returning the same
+    ``usedRequests``/``remainingPercentage`` with its ``resetDate`` frozen
+    at the process start time, while a freshly started server on every
+    call returned a ``resetDate`` matching the call time (that field tracks
+    the moment of the underlying fetch - see ``docs/api-reference.md``).
+    Usage made elsewhere (another machine, the IDE) therefore never showed
+    up until the app was restarted. Paying a ~2s subprocess start per poll,
+    on a cadence measured in minutes, buys a real fetch every time.
+    """
     try:
         result = _CLIENT.request('account.getQuota', {})
         data = normalize_quota_snapshots(result)
@@ -447,6 +465,8 @@ def fetch_usage() -> dict[str, Any]:
             'error': message,
             **({'auth_error': True} if auth_error else {}),
         }
+    finally:
+        _CLIENT.close()
 
 
 def fetch_prepaid_credits(_org_uuid: Any) -> None:

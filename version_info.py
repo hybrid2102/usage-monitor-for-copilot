@@ -17,11 +17,11 @@ VSVersionInfo(
                 [
                     StringStruct('CompanyName', 'hybrid2102'),
                     StringStruct('FileDescription', 'Usage Monitor for Copilot'),
-                    StringStruct('FileVersion', '0.3.1.0'),
+                    StringStruct('FileVersion', '0.3.2.0'),
                     StringStruct('InternalName', 'UsageMonitorForCopilot'),
                     StringStruct('OriginalFilename', 'UsageMonitorForCopilot.exe'),
                     StringStruct('ProductName', 'Usage Monitor for Copilot'),
-                    StringStruct('ProductVersion', '0.3.1.0'),
+                    StringStruct('ProductVersion', '0.3.2.0'),
                 ],
             ),
         ]),

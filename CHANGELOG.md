@@ -2,7 +2,11 @@
 
 All notable changes to Usage Monitor for Copilot are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.3.2] - 2026-09-17
+
+### Fixed
+
+- The displayed usage stopped updating while the app was running: usage made elsewhere (another machine, the IDE) only showed up after a restart. `copilot --server` answers `account.getQuota` from a snapshot taken once at process start and never refreshes it, so the monitor now stops the server after every poll and starts a fresh one for the next, at the cost of about two seconds of subprocess startup per poll.
 
 ## [0.3.1] - 2026-09-14
 

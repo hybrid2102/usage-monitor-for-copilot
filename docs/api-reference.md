@@ -108,6 +108,10 @@ Calling `account.getQuota` twice, 20 seconds apart, produced two `resetDate` val
 
 Copilot quotas are monthly. To make the pace indicator useful despite that limitation, every normalized quota field receives a synthesized `resets_at`: the next **local** calendar-month boundary (midnight on the first day of the next month). This drives the countdown and elapsed-time marker. It is an intentional monthly-cycle assumption, not a timestamp reported by GitHub; if an account has a different billing boundary, its marker is approximate.
 
+### A long-lived server never refreshes the quota
+
+Measured against CLI 1.0.84-8: a `copilot --server` process kept open for several minutes answered every `account.getQuota` with the same `usedRequests`/`remainingPercentage` and a `resetDate` frozen at the process start time, while a server started fresh for each call returned a `resetDate` matching the call time. Since `resetDate` tracks the moment of the underlying fetch, the server takes one snapshot at startup and serves it for its whole lifetime. The monitor therefore stops the server after every `account.getQuota` and starts a new one for the next poll (`fetch_usage` in `api.py`); the ~2s startup cost is negligible against the polling cadence. Keeping the process alive across polls would silently freeze the displayed usage until the app restarted.
+
 ### Overage fields are not yet surfaced
 
 `overage`, `overageEntitlement`, and `overageAllowedWithExhaustedQuota` exist per quota key in the response, unlike the Claude and Codex monitors' single top-level "extra usage" meter. Multiple Copilot quota fields could be in overage at once, and collapsing that onto one UI slot is a product decision rather than a mechanical port - these fields are read by nothing in this first version.
