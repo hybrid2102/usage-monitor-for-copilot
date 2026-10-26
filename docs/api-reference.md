@@ -108,9 +108,11 @@ Calling `account.getQuota` twice, 20 seconds apart, produced two `resetDate` val
 
 Copilot quotas are monthly. To make the pace indicator useful despite that limitation, every normalized quota field receives a synthesized `resets_at`: the next **local** calendar-month boundary (midnight on the first day of the next month). This drives the countdown and elapsed-time marker. It is an intentional monthly-cycle assumption, not a timestamp reported by GitHub; if an account has a different billing boundary, its marker is approximate.
 
-### A long-lived server never refreshes the quota
+### Quota comes from an on-disk cache the CLI never refreshes
 
-Measured against CLI 1.0.84-8: a `copilot --server` process kept open for several minutes answered every `account.getQuota` with the same `usedRequests`/`remainingPercentage` and a `resetDate` frozen at the process start time, while a server started fresh for each call returned a `resetDate` matching the call time. Since `resetDate` tracks the moment of the underlying fetch, the server takes one snapshot at startup and serves it for its whole lifetime. The monitor therefore stops the server after every `account.getQuota` and starts a new one for the next poll (`fetch_usage` in `api.py`); the ~2s startup cost is negligible against the polling cadence. Keeping the process alive across polls would silently freeze the displayed usage until the app restarted.
+`account.getQuota` does not call GitHub on every request. It answers from `copilot-user-cache.json` in the CLI's cache directory (`COPILOT_CACHE_HOME`, by default `%LOCALAPPDATA%\copilot` on Windows), a cache of the GitHub "copilot user" response that also carries `quota_snapshots`. Measured against CLI 1.0.103: once an entry is there, every new `copilot --server` process serves it unchanged (same `retrievedAt`, same `usedRequests`), and the cache it was serving was 40 minutes and almost 300 premium requests behind; deleting the file made the next process fetch fresh data and write a new entry. This is also why 0.3.2's restart-per-poll alone did not help on newer CLIs.
+
+The monitor therefore runs the CLI with a `COPILOT_CACHE_HOME` of its own (`<LOCALAPPDATA or XDG_CACHE_HOME>/usage-monitor-for-copilot/copilot-cli-cache`, `cli_cache_home()` in `api.py`) and deletes `copilot-user-cache.json` there before every start. It never touches the user's default CLI cache. It still stops the server after every `account.getQuota` (`fetch_usage`), so each poll is one fresh fetch. The cost: the CLI unpacks its package (about 200 MB) into `pkg` in that directory on the first start and after every CLI update, which takes a few seconds once.
 
 ### Overage fields are not yet surfaced
 

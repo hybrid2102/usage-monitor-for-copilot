@@ -2,6 +2,12 @@
 
 All notable changes to Usage Monitor for Copilot are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.3.3] - 2026-10-26
+
+### Fixed
+
+- The displayed usage still stopped updating until a restart, despite 0.3.2. Newer Copilot CLIs (verified on 1.0.103) answer `account.getQuota` from an on-disk cache (`copilot-user-cache.json`) that they never refresh, so even a freshly started server returned the old numbers. The monitor now runs the CLI with its own cache directory under the local app-data folder and clears that cache before every poll; the user's own Copilot CLI cache is left untouched. The first poll after installing or updating the CLI takes a few extra seconds while the CLI unpacks itself (about 200 MB) into that directory.
+
 ## [0.3.2] - 2026-09-17
 
 ### Fixed

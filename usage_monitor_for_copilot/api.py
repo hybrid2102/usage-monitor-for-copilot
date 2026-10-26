@@ -28,6 +28,7 @@ import subprocess
 import threading
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, BinaryIO
 
 from .copilot_cli import COPILOT_CLI_PATH
@@ -35,12 +36,35 @@ from .i18n import T
 from .platforms import no_window_kwargs
 
 __all__ = [
-    'CopilotServerClient', 'CopilotServerError', 'api_headers', 'close_client', 'encode_frame',
+    'CopilotServerClient', 'CopilotServerError', 'api_headers', 'cli_cache_home', 'close_client', 'encode_frame',
     'fetch_prepaid_credits', 'fetch_profile', 'fetch_usage', 'is_authenticated',
     'monthly_reset_at', 'normalize_quota_snapshots', 'read_access_token', 'read_frame',
 ]
 
 _PORT_PATTERN = re.compile(r'listening on port (\d+)')
+
+# Name of the CLI's on-disk cache of the GitHub "copilot user" response,
+# which is where account.getQuota reads its quota snapshots from.
+_USER_CACHE_FILENAME = 'copilot-user-cache.json'
+
+
+def cli_cache_home() -> Path:
+    """Return the private ``COPILOT_CACHE_HOME`` the monitor runs the CLI with.
+
+    ``copilot --server`` answers ``account.getQuota`` from
+    ``<COPILOT_CACHE_HOME>/copilot-user-cache.json`` and never refetches an
+    entry it finds there, so quota read through the shared default cache
+    (``%LOCALAPPDATA%\\copilot``) stays frozen at whenever that entry was
+    written. A cache directory owned by the monitor alone lets it drop that
+    file before every start (see :meth:`CopilotServerClient._ensure_started_locked`)
+    without touching the cache the user's own Copilot sessions rely on.
+
+    Lives under the local (non-roaming) cache root, never next to the exe:
+    the CLI unpacks its ~200 MB package into ``pkg`` here on first start and
+    after every CLI update, and the exe often sits in a synced folder.
+    """
+    base = os.environ.get('LOCALAPPDATA') or os.environ.get('XDG_CACHE_HOME') or str(Path.home() / '.cache')
+    return Path(base) / 'usage-monitor-for-copilot' / 'copilot-cli-cache'
 
 
 class CopilotServerError(RuntimeError):
@@ -208,6 +232,15 @@ class CopilotServerClient:
         token = secrets.token_hex(16)
         env = dict(os.environ)
         env['COPILOT_CONNECTION_TOKEN'] = token
+        cache_home = cli_cache_home()
+        env['COPILOT_CACHE_HOME'] = str(cache_home)
+        # A cached user response is served as-is forever (see cli_cache_home);
+        # without it the CLI fetches fresh quota and writes a new entry. A failed
+        # delete only means this one poll may show stale numbers.
+        try:
+            (cache_home / _USER_CACHE_FILENAME).unlink(missing_ok=True)
+        except OSError:
+            pass
 
         try:
             self._process = subprocess.Popen(
@@ -434,17 +467,14 @@ def fetch_profile() -> dict[str, Any] | None:
 def fetch_usage() -> dict[str, Any]:
     """Fetch Copilot quota snapshots and normalize them for the UI.
 
-    The ``copilot --server`` subprocess is stopped after every call, on
-    purpose. A long-lived server answers ``account.getQuota`` from a
-    snapshot it took once at startup and never refreshes: measured against
-    CLI 1.0.84, a server kept open for minutes kept returning the same
-    ``usedRequests``/``remainingPercentage`` with its ``resetDate`` frozen
-    at the process start time, while a freshly started server on every
-    call returned a ``resetDate`` matching the call time (that field tracks
-    the moment of the underlying fetch - see ``docs/api-reference.md``).
-    Usage made elsewhere (another machine, the IDE) therefore never showed
-    up until the app was restarted. Paying a ~2s subprocess start per poll,
-    on a cadence measured in minutes, buys a real fetch every time.
+    Every call gets a fresh ``copilot --server`` with its user cache emptied
+    (see :func:`cli_cache_home`): the CLI serves ``account.getQuota`` from an
+    on-disk cache entry it never refetches, so reusing either a running
+    server or a cached entry leaves usage made elsewhere (another machine,
+    the IDE, a CLI session) invisible until that entry happens to be
+    replaced. The server is stopped after every call, success or failure,
+    so the next poll starts from scratch; on a cadence measured in minutes,
+    the ~1s start cost is negligible.
     """
     try:
         result = _CLIENT.request('account.getQuota', {})

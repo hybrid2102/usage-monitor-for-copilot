@@ -3,15 +3,18 @@ from __future__ import annotations
 
 import io
 import json
+import tempfile
 import threading
 import time
 import unittest
 from datetime import datetime, timezone
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from usage_monitor_for_copilot.api import (
     CopilotServerClient,
     CopilotServerError,
+    cli_cache_home,
     encode_frame,
     fetch_prepaid_credits,
     fetch_profile,
@@ -146,6 +149,46 @@ class TestConnectHandshake(unittest.TestCase):
 
         self.assertEqual(popen.call_args.args[0], ['copilot', '--server'])
         self.assertEqual(popen.call_args.kwargs['env']['COPILOT_CONNECTION_TOKEN'], sent['params']['token'])
+
+    @patch('usage_monitor_for_copilot.api.socket.create_connection')
+    @patch('usage_monitor_for_copilot.api.subprocess.Popen')
+    def test_starts_with_a_private_cache_home_and_drops_its_user_cache(self, popen, create_connection):
+        # The CLI serves account.getQuota from copilot-user-cache.json and never
+        # refetches an entry it finds there, so it must be gone before each start.
+        with tempfile.TemporaryDirectory() as tmp,                 patch('usage_monitor_for_copilot.api.cli_cache_home', return_value=Path(tmp)):
+            user_cache = Path(tmp) / 'copilot-user-cache.json'
+            user_cache.write_text('{}', encoding='utf-8')
+            seen_at_spawn: list[bool] = []
+
+            def spawn(*_args, **_kwargs):
+                seen_at_spawn.append(user_cache.exists())
+                return _started_process('CLI server listening on port 54321\n')
+
+            popen.side_effect = spawn
+            create_connection.return_value = _connected_socket({'id': 1, 'result': {'ok': True}})
+
+            CopilotServerClient('copilot')._ensure_started_locked(timeout=2.0)
+
+            self.assertEqual(seen_at_spawn, [False])
+            self.assertEqual(popen.call_args.kwargs['env']['COPILOT_CACHE_HOME'], tmp)
+
+    @patch('usage_monitor_for_copilot.api.socket.create_connection')
+    @patch('usage_monitor_for_copilot.api.subprocess.Popen')
+    def test_a_user_cache_that_cannot_be_removed_does_not_block_the_start(self, popen, create_connection):
+        popen.return_value = _started_process('CLI server listening on port 54321\n')
+        create_connection.return_value = _connected_socket({'id': 1, 'result': {'ok': True}})
+
+        client = CopilotServerClient('copilot')
+        with patch('usage_monitor_for_copilot.api.Path.unlink', side_effect=PermissionError('locked')):
+            client._ensure_started_locked(timeout=2.0)
+
+        self.assertTrue(client._connected)
+
+    def test_cli_cache_home_is_under_the_local_cache_root(self):
+        with patch.dict('os.environ', {'LOCALAPPDATA': str(Path('/local'))}):
+            self.assertEqual(cli_cache_home(), Path('/local') / 'usage-monitor-for-copilot' / 'copilot-cli-cache')
+        with patch.dict('os.environ', {'LOCALAPPDATA': '', 'XDG_CACHE_HOME': str(Path('/xdg'))}):
+            self.assertEqual(cli_cache_home(), Path('/xdg') / 'usage-monitor-for-copilot' / 'copilot-cli-cache')
 
     @patch('usage_monitor_for_copilot.api.socket.create_connection')
     @patch('usage_monitor_for_copilot.api.subprocess.Popen')
@@ -331,9 +374,8 @@ class TestFetchUsage(unittest.TestCase):
 
     @patch('usage_monitor_for_copilot.api._CLIENT')
     def test_stops_the_server_after_a_successful_fetch(self, client):
-        # A long-lived `copilot --server` answers account.getQuota from a snapshot
-        # taken at startup and never refreshed, so usage made elsewhere would
-        # stay invisible until the app restarted. Every poll must start fresh.
+        # Every poll must start a fresh `copilot --server` (whose user cache
+        # _ensure_started_locked empties first), never reuse a running one.
         client.request.return_value = _business_account_snapshot()
 
         fetch_usage()

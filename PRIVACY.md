@@ -24,7 +24,7 @@ While running, the application may hold per-category quota utilization, unlimite
 
 ## Local settings and operating-system integration
 
-Configuration is read from the project settings location, respecting `COPILOT_HOME` when set. If autostart or notification identity is enabled, the application may create the normal Windows registry values or Linux desktop files required for those features. No other persistent write is made: the `copilot --server` subprocess and the connection token generated for it both exist only for the lifetime of that process and are never written to disk.
+Configuration is read from the project settings location, respecting `COPILOT_HOME` when set. If autostart or notification identity is enabled, the application may create the normal Windows registry values or Linux desktop files required for those features. The `copilot --server` subprocess and the connection token generated for it both exist only for the lifetime of that process, and the token is never written to disk. The subprocess runs with its own Copilot CLI cache directory, `usage-monitor-for-copilot/copilot-cli-cache` under `%LOCALAPPDATA%` (Windows) or `$XDG_CACHE_HOME`/`~/.cache` (Linux), so the user's own CLI cache is never touched. The CLI writes its unpacked package (about 200 MB) and its cached Copilot account response (login, organizations, quota) there; the monitor deletes that account response before every poll. The directory is safe to delete and can be removed when uninstalling. No other persistent write is made.
 
 Optional event commands are executed locally only when explicitly configured by the user. Their privacy and security impact depends on the commands chosen.
 
